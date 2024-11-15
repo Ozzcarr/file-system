@@ -1,31 +1,21 @@
+#include "shell.h"
+
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
-#include "shell.h"
+
 #include "fs.h"
 
-std::string commands_str[] = {
-    "format", "create", "cat", "ls",
-    "cp", "mv", "rm", "append",
-    "mkdir", "cd", "pwd",
-    "chmod",
-    "help", "quit"
-};
+std::string commands_str[] = {"format", "create", "cat",    "ls",    "cp",
+                              "mv",     "rm",     "append", "mkdir", "cd",
+                              "pwd",    "chmod",  "help",   "quit"};
 
-Shell::Shell()
-{
-    std::cout << "Starting shell...\n";
-}
+Shell::Shell() { std::cout << "Starting shell...\n"; }
 
-Shell::~Shell()
-{
-    std::cout << "Exiting shell...\n";
-}
+Shell::~Shell() { std::cout << "Exiting shell...\n"; }
 
-void
-Shell::run()
-{
+void Shell::run() {
     bool running = true;
     std::string line;
     std::string str;
@@ -40,7 +30,7 @@ Shell::run()
         cmd_line.clear();
         str.clear();
         while (linestream.get(c)) {
-            //std::cout << "parsing cmd line: " << c << "\n";
+            // std::cout << "parsing cmd line: " << c << "\n";
             if (c != ' ') {
                 str += c;
             } else {
@@ -51,8 +41,7 @@ Shell::run()
                 }
             }
         }
-        if (!str.empty())
-            cmd_line.push_back(str);
+        if (!str.empty()) cmd_line.push_back(str);
         if (line.empty())
             cmd = "";
         else
@@ -73,7 +62,8 @@ Shell::run()
             // check return value so everything is ok
             ret_val = filesystem.format();
             if (ret_val) {
-                std::cout << "Error: format failed, error code " << ret_val << std::endl;
+                std::cout << "Error: format failed, error code " << ret_val
+                          << std::endl;
             }
         }
 
@@ -114,7 +104,8 @@ Shell::run()
             // check return value so everything is ok
             ret_val = filesystem.ls();
             if (ret_val) {
-                std::cout << "Error: ls failed, error code " << ret_val << std::endl;
+                std::cout << "Error: ls failed, error code " << ret_val
+                          << std::endl;
             }
         }
 
@@ -213,7 +204,8 @@ Shell::run()
             // check return value so everything is ok
             ret_val = filesystem.pwd();
             if (ret_val) {
-                std::cout << "Error: pwd failed, error code " << ret_val << std::endl;
+                std::cout << "Error: pwd failed, error code " << ret_val
+                          << std::endl;
             }
         }
 
@@ -237,16 +229,18 @@ Shell::run()
 
         else if (cmd == "help") {
             std::cout << "Available commands:\n";
-            std::cout << "format, create, cat, ls, cp, mv, rm, append, mkdir, cd, pwd, chmod, help, quit\n";
+            std::cout << "format, create, cat, ls, cp, mv, rm, append, mkdir, "
+                         "cd, pwd, chmod, help, quit\n";
         }
 
         else if (cmd == "") {
-            ; // do nothing
+            ;  // do nothing
         }
 
         else {
             std::cout << "Available commands:\n";
-            std::cout << "format, create, cat, ls, cp, mv, rm, append, mkdir, cd, pwd, chmod, help, quit\n";
+            std::cout << "format, create, cat, ls, cp, mv, rm, append, mkdir, "
+                         "cd, pwd, chmod, help, quit\n";
         }
     }
 }

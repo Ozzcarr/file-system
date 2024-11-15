@@ -5,8 +5,8 @@
  *    Last Modified : 2022-11-24
  * Last Modified by : HGR
  *          Version : v1.3
- * 
- * Test program to check Task 1 in Lab Assignment 3 in the 
+ *
+ * Test program to check Task 1 in Lab Assignment 3 in the
  * operating system courses DV1628/DV1629
  *
  * Copyright 2020-2022 by Håkan Grahn
@@ -14,42 +14,36 @@
  * All Rights Reserved
  *****************************************************************************/
 
+#include <fcntl.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <cstring>
-#include <cstdio>
-#include <unistd.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include "test_script.h"
+
 #include "fs.h"
+#include "test_script.h"
 
-#define PRINTDIV std::cout <<  "================================================================================" << std::endl
-#define PRINTDIV2 std::cout << "----------------------------------------" << std::endl
+#define PRINTDIV                                                               \
+    std::cout << "===========================================================" \
+                 "====================="                                       \
+              << std::endl
+#define PRINTDIV2 \
+    std::cout << "----------------------------------------" << std::endl
 
-std::string commands_str[] = {
-    "format", "create", "cat", "ls",
-    "cp", "mv", "rm", "append",
-    "mkdir", "cd", "pwd",
-    "chmod",
-    "help", "quit"
-};
+std::string commands_str[] = {"format", "create", "cat",    "ls",    "cp",
+                              "mv",     "rm",     "append", "mkdir", "cd",
+                              "pwd",    "chmod",  "help",   "quit"};
 
-Shell::Shell()
-{
-    std::cout << "Creating and starting shell...\n";
-}
+Shell::Shell() { std::cout << "Creating and starting shell...\n"; }
 
-Shell::~Shell()
-{
-    std::cout << "Exiting shell...\n";
-}
+Shell::~Shell() { std::cout << "Exiting shell...\n"; }
 
-void
-Shell::run()
-{
+void Shell::run() {
     std::string cmd, arg1, arg2;
     int ret_val = 0;
     int fd[2];
@@ -58,7 +52,9 @@ Shell::run()
     std::string input2 = "hej heja hejare hejast\n";
 
     PRINTDIV;
-    std::cout << "\\ / \\ / \\ / \\ / \\ / \\ / \\     new test session     / \\ / \\ / \\ / \\ / \\ / \\ / \\ /" << std::endl;
+    std::cout << "\\ / \\ / \\ / \\ / \\ / \\ / \\     new test session     / "
+                 "\\ / \\ / \\ / \\ / \\ / \\ / \\ /"
+              << std::endl;
     PRINTDIV;
     std::cout << "Starting test sequence..." << std::endl;
     PRINTDIV;
@@ -68,7 +64,8 @@ Shell::run()
     std::cout << "Testing format()..." << std::endl;
     ret_val = filesystem.format();
     if (ret_val) {
-        std::cout << "Error: format failed, error code " << ret_val << std::endl;
+        std::cout << "Error: format failed, error code " << ret_val
+                  << std::endl;
     }
     // check that the disk is empty
     std::cout << "Executing ls" << std::endl;
@@ -93,7 +90,7 @@ Shell::run()
     std::cout << "Testing create(f1)..." << std::endl;
     arg1 = "f1";
     fw = open("input1.txt", O_RDONLY);
-    dup2(fw,0);
+    dup2(fw, 0);
     ret_val = filesystem.create(arg1);
     if (ret_val) {
         std::cout << "Error: create " << arg1;
@@ -113,7 +110,7 @@ Shell::run()
     std::cout << "Testing create() with large file..." << std::endl;
     arg1 = "f4129";
     fw = open("input3.txt", O_RDONLY);
-    dup2(fw,0);
+    dup2(fw, 0);
     ret_val = filesystem.create(arg1);
     if (ret_val) {
         std::cout << "Error: create " << arg1;
@@ -136,8 +133,7 @@ Shell::run()
     std::cout << input1;
     std::cout << "Actual output:" << std::endl;
     ret_val = filesystem.cat(arg1);
-    if (ret_val)
-    {
+    if (ret_val) {
         std::cout << "Error: cat " << arg1;
         std::cout << " failed, error code " << ret_val << std::endl;
     }
@@ -147,8 +143,7 @@ Shell::run()
     std::cout << "... some kind of error message" << std::endl;
     std::cout << "Actual output:" << std::endl;
     ret_val = filesystem.cat(arg1);
-    if (ret_val)
-    {
+    if (ret_val) {
         std::cout << "Error: cat " << arg1;
         std::cout << " failed, error code " << ret_val << std::endl;
     }
@@ -163,8 +158,7 @@ Shell::run()
     fw = open("input1.txt", O_RDONLY);
     dup2(fw, 0);
     ret_val = filesystem.create(arg1);
-    if (ret_val)
-    {
+    if (ret_val) {
         std::cout << "Error: create " << arg1;
         std::cout << " failed, error code " << ret_val << std::endl;
     }
@@ -172,7 +166,8 @@ Shell::run()
     // check that the file is there
     std::cout << "Expected output:" << std::endl;
     std::cout << "name\t size" << std::endl;
-    std::cout << "AbcdefghijAbcdefghijAbcdefghijAbcdefghijAbcdefghijAbcde\t 16" << std::endl;
+    std::cout << "AbcdefghijAbcdefghijAbcdefghijAbcdefghijAbcdefghijAbcde\t 16"
+              << std::endl;
     std::cout << "Actual output:" << std::endl;
     ret_val = filesystem.ls();
 
@@ -180,14 +175,14 @@ Shell::run()
     std::cout << "Expected output:" << std::endl;
     std::cout << " ... some error message" << std::endl;
     std::cout << "name\t size" << std::endl;
-    std::cout << "AbcdefghijAbcdefghijAbcdefghijAbcdefghijAbcdefghijAbcde\t 16" << std::endl;
+    std::cout << "AbcdefghijAbcdefghijAbcdefghijAbcdefghijAbcdefghijAbcde\t 16"
+              << std::endl;
     std::cout << "Actual output:" << std::endl;
     arg1 = "AbcdefghijAbcdefghijAbcdefghijAbcdefghijAbcdefghijAbcdeX";
     fw = open("input1.txt", O_RDONLY);
     dup2(fw, 0);
     ret_val = filesystem.create(arg1);
-    if (ret_val)
-    {
+    if (ret_val) {
         std::cout << "Error: create " << arg1;
         std::cout << " failed, error code " << ret_val << std::endl;
     }
@@ -196,14 +191,18 @@ Shell::run()
 
     PRINTDIV2;
 
-    std::cout << "Testing the number of files that fit in a directory ..." << std::endl;
+    std::cout << "Testing the number of files that fit in a directory ..."
+              << std::endl;
     std::cout << "Formatting disk ..." << std::endl;
     ret_val = filesystem.format();
 
     // check how many dir entries that fit in a block
     int no_dir_entries = BLOCK_SIZE / sizeof(dir_entry);
-    std::cout << "BLOCK_SIZE = " << BLOCK_SIZE << ", sizeof(dir_entry) = " << sizeof(dir_entry) << ", " << no_dir_entries << " dir_entries per disk block." << std::endl;
-    std::cout << "Creating " << no_dir_entries << " files in the root directory..." << std::endl;
+    std::cout << "BLOCK_SIZE = " << BLOCK_SIZE
+              << ", sizeof(dir_entry) = " << sizeof(dir_entry) << ", "
+              << no_dir_entries << " dir_entries per disk block." << std::endl;
+    std::cout << "Creating " << no_dir_entries
+              << " files in the root directory..." << std::endl;
     for (int i = 0; i < no_dir_entries; ++i) {
         arg1 = "f" + std::to_string(i);
         fw = open("input1.txt", O_RDONLY);
@@ -226,7 +225,8 @@ Shell::run()
     std::cout << "Actual output:" << std::endl;
     ret_val = filesystem.ls();
 
-    std::cout << "--------\nAdding one more file should give an error..." << std::endl;
+    std::cout << "--------\nAdding one more file should give an error..."
+              << std::endl;
     std::cout << "Expected output:" << std::endl;
     std::cout << "... some kind of error message" << std::endl;
     std::cout << "Actual output:" << std::endl;
@@ -234,8 +234,7 @@ Shell::run()
     fw = open("input1.txt", O_RDONLY);
     dup2(fw, 0);
     ret_val = filesystem.create(arg1);
-    if (ret_val)
-    {
+    if (ret_val) {
         std::cout << "Error: create " << arg1;
         std::cout << " failed, error code " << ret_val << std::endl;
     }
@@ -245,5 +244,4 @@ Shell::run()
 
     std::cout << "... Task 1 done" << std::endl;
     PRINTDIV;
-
 }

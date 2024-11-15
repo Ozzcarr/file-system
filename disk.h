@@ -1,5 +1,5 @@
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 #ifndef __DISK_H__
 #define __DISK_H__
@@ -9,12 +9,13 @@
 #define DEBUG false
 
 class Disk {
-private:
+   private:
     std::fstream diskfile;
     const unsigned no_blocks = 2048;
     const unsigned disk_size = BLOCK_SIZE * no_blocks;
-    bool disk_file_exists (const std::string& name);
-public:
+    bool disk_file_exists(const std::string &name);
+
+   public:
     Disk();
     ~Disk();
     unsigned get_no_blocks() { return no_blocks; }
@@ -25,4 +26,4 @@ public:
     int read(unsigned block_no, uint8_t *blk);
 };
 
-#endif // __DISK_H__
+#endif  // __DISK_H__

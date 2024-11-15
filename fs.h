@@ -1,5 +1,6 @@
-#include <iostream>
 #include <cstdint>
+#include <iostream>
+
 #include "disk.h"
 
 #ifndef __FS_H__
@@ -17,20 +18,20 @@
 #define EXECUTE 0x01
 
 struct dir_entry {
-    char file_name[56]; // name of the file / sub-directory
-    uint32_t size; // size of the file in bytes
-    uint16_t first_blk; // index in the FAT for the first block of the file
-    uint8_t type; // directory (1) or file (0)
-    uint8_t access_rights; // read (0x04), write (0x02), execute (0x01)
+    char file_name[56];     // name of the file / sub-directory
+    uint32_t size;          // size of the file in bytes
+    uint16_t first_blk;     // index in the FAT for the first block of the file
+    uint8_t type;           // directory (1) or file (0)
+    uint8_t access_rights;  // read (0x04), write (0x02), execute (0x01)
 };
 
 class FS {
-private:
+   private:
     Disk disk;
     // size of a FAT entry is 2 bytes
-    int16_t fat[BLOCK_SIZE/2];
+    int16_t fat[BLOCK_SIZE / 2];
 
-public:
+   public:
     FS();
     ~FS();
     // formats the disk, i.e., creates an empty file system
@@ -46,19 +47,21 @@ public:
     // cp <sourcepath> <destpath> makes an exact copy of the file
     // <sourcepath> to a new file <destpath>
     int cp(std::string sourcepath, std::string destpath);
-    // mv <sourcepath> <destpath> renames the file <sourcepath> to the name <destpath>,
-    // or moves the file <sourcepath> to the directory <destpath> (if dest is a directory)
+    // mv <sourcepath> <destpath> renames the file <sourcepath> to the name
+    // <destpath>, or moves the file <sourcepath> to the directory <destpath>
+    // (if dest is a directory)
     int mv(std::string sourcepath, std::string destpath);
     // rm <filepath> removes / deletes the file <filepath>
     int rm(std::string filepath);
-    // append <filepath1> <filepath2> appends the contents of file <filepath1> to
-    // the end of file <filepath2>. The file <filepath1> is unchanged.
+    // append <filepath1> <filepath2> appends the contents of file <filepath1>
+    // to the end of file <filepath2>. The file <filepath1> is unchanged.
     int append(std::string filepath1, std::string filepath2);
 
     // mkdir <dirpath> creates a new sub-directory with the name <dirpath>
     // in the current directory
     int mkdir(std::string dirpath);
-    // cd <dirpath> changes the current (working) directory to the directory named <dirpath>
+    // cd <dirpath> changes the current (working) directory to the directory
+    // named <dirpath>
     int cd(std::string dirpath);
     // pwd prints the full path, i.e., from the root directory, to the current
     // directory, including the current directory name
@@ -69,4 +72,4 @@ public:
     int chmod(std::string accessrights, std::string filepath);
 };
 
-#endif // __FS_H__
+#endif  // __FS_H__

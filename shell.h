@@ -1,16 +1,18 @@
 #include <iostream>
+
 #include "fs.h"
 
 #ifndef __SHELL_H__
 #define __SHELL_H__
 
 class Shell {
-private:
+   private:
     FS filesystem;
-public:
+
+   public:
     Shell();
     ~Shell();
     void run();
 };
 
-#endif // __SHELL_H__
+#endif  // __SHELL_H__
