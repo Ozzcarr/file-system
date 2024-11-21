@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <vector>
 
 int16_t FS::findDirEntry(uint16_t dirFirstBlock, std::string fileName,
                          std::array<dir_entry, 64>& dirBlock,
@@ -73,13 +74,12 @@ int FS::create(std::string filepath) {
     // set currentDir to root
     uint16_t currentDirIndex = ROOT_BLOCK;
 
+    std::string data;
+
     // find the directory that we should put our file in
     uint8_t nameIndex = 0;
     for (size_t i = 0; i < filepath.length(); i++) {
-        if (filepath[i] != '/' && filepath[i] != '\n') {
-            if (nameIndex == 56) return -1;  // Invalid filePath or name
-            fileName[nameIndex++] = filepath[i];
-        } else if (filepath[i] != '\n') {
+        if (filepath[i] == '/') {
             blockContainingDirFat = this->findDirEntry(
                 blockContainingDir[currentDirIndex].first_blk, fileName,
                 blockContainingDir, currentDirIndex);
@@ -88,13 +88,19 @@ int FS::create(std::string filepath) {
                 return -1;  // Dir not found
             fileName = "";
             nameIndex = 0;
-        } else {
+        } else if (filepath[i] == '\n') {
             // Aparantly data is encoded in the filePath and we have reached
             // that - "Creates a new file with the name filename on the disk. The
             // data contents are written on the following rows. An empty
             // row ends the user input data. This enables the user to write
             // several lines of input."
             // this is litterally retarded
+            data = std::string(filepath.begin() + i, filepath.end() -1); // -1 Might be wrong
+            data.reserve(((data.size() / 4096) + 1) * 4096); // to prevent segFault
+            break;
+        } else {
+            if (nameIndex == 56) return -1;  // Invalid filePath or name
+            fileName[nameIndex++] = filepath[i];
         }
     }
     if (fileName == "") return -1;  // Invalid name, prob
@@ -115,17 +121,34 @@ int FS::create(std::string filepath) {
     std::array<dir_entry, 64> newFileBlockLocation;
     this->disk.read(fatIndex, (uint8_t*)newFileBlockLocation.data());
 
-    // fatindex for the new file file
-    int newFileLocation = this->getEmptyFat();
-    if (newFileLocation == -1) {
-        return -1;  // no space
+    // fatindexes for the new file
+    int neededPages = (data.size() / BLOCK_SIZE) + 1;
+    std::vector<int> newSpace;
+    newSpace.reserve(neededPages);
+    for (int i = 0; i < neededPages; i++)
+    {
+        int newFileLocation = this->getEmptyFat();
+        if (newFileLocation == -1) {
+            return -1;  // no space
+        }
+        newSpace.emplace_back(newFileLocation);
     }
-    this->fat[newFileLocation] = FAT_EOF;
+
+    // write data
+    int i = 0;
+    for (; i < neededPages - 1; i++)
+    {
+        this->disk.write(newSpace[i], (uint8_t*)(data.front() + i * BLOCK_SIZE));
+        this->fat[newSpace[i]] = newSpace[i + 1];
+    }
+    this->disk.write(newSpace[i], (uint8_t*)(data.front() + i * BLOCK_SIZE));
+    this->fat[newSpace[i]] = FAT_EOF;
+
 
     // meta data for the new file
     dir_entry newEntry{.file_name = fileName.front(),
                        .size = 0,
-                       .first_blk = newFileLocation,
+                       .first_blk = newSpace[0],
                        .type = TYPE_FILE,
                        .access_rights = WRITE | READ};
 
