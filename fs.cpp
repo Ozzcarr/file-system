@@ -8,7 +8,12 @@ FS::~FS() {}
 
 // formats the disk, i.e., creates an empty file system
 int FS::format() {
-    std::cout << "FS::format()\n";
+    this->fat[0] = ROOT_BLOCK;
+    this->fat[1] = FAT_BLOCK;
+    for (int i = 2; i < BLOCK_SIZE / 2; i++) this->fat[i] = FAT_FREE;
+
+    this->disk.write(FAT_BLOCK, (uint8_t*)"");
+    this->disk.write(ROOT_BLOCK, (uint8_t*)"");
     return 0;
 }
 
