@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdint>
 #include <iostream>
 
@@ -30,6 +31,18 @@ class FS {
     Disk disk;
     // size of a FAT entry is 2 bytes
     int16_t fat[BLOCK_SIZE / 2];
+
+    /// @brief
+    /// @param dirFirstBlock
+    /// @param fileName
+    /// @return
+    int16_t findDirEntry(uint16_t dirFirstBlock, std::string fileName,
+                          std::array<dir_entry, 64>& dirBlock,
+                          uint16_t& dirBlockIndex);
+
+    /// @brief return the Fat index to an empty file slot
+    /// @return index or -1 if no empty slots
+    int getEmptyFat() const;
 
    public:
     FS();
