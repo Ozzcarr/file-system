@@ -1,5 +1,7 @@
 #include "fs.h"
 
+#include <stdint.h>
+
 #include <iostream>
 
 FS::FS() { std::cout << "FS::FS()... Creating file system\n"; }
@@ -12,8 +14,27 @@ int FS::format() {
     this->fat[1] = FAT_BLOCK;
     for (int i = 2; i < BLOCK_SIZE / 2; i++) this->fat[i] = FAT_FREE;
 
-    this->disk.write(FAT_BLOCK, (uint8_t*)"");
-    this->disk.write(ROOT_BLOCK, (uint8_t*)"");
+    // size 64 to make sure we don't go out of scope in disk.write since that
+    // function takes a uint8_t* and then indexes 4096 steps nito that
+    dir_entry rootAndFat[64] = {
+        {
+            .file_name = ".",
+            .size = 128,
+            .first_blk = 0,
+            .type = TYPE_DIR,
+            .access_rights = READ | WRITE
+        },
+        {
+            .file_name = "..",
+            .size = 128,
+            .first_blk = 0,
+            .type = TYPE_DIR,
+            .access_rights = READ | WRITE
+        },
+    };
+
+    this->disk.write(ROOT_BLOCK, (uint8_t*)&rootAndFat);
+    this->disk.write(FAT_BLOCK, (uint8_t*)&(this->fat));
     return 0;
 }
 
