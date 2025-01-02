@@ -1,6 +1,7 @@
 #include <array>
 #include <cstdint>
 #include <iostream>
+#include <vector>
 
 #include "disk.h"
 
@@ -32,13 +33,28 @@ class FS {
     // size of a FAT entry is 2 bytes
     int16_t fat[BLOCK_SIZE / 2];
 
+    dir_entry workingDir;
+
     /// @brief
     /// @param dirFirstBlock
     /// @param fileName
     /// @return
-    int16_t findDirEntry(uint16_t dirFirstBlock, std::string fileName,
-                          std::array<dir_entry, 64>& dirBlock,
-                          uint16_t& dirBlockIndex);
+    bool findDirEntry(dir_entry dir, std::string fileName, dir_entry& result);
+
+    bool __cd(dir_entry& workingDir, const std::string& path, bool createDirs = false);
+
+    bool __cd(dir_entry& workingDir, const std::vector<std::string>& path, bool createDirs = false);
+
+
+    bool __create(dir_entry dir, dir_entry filedata, std::string data);
+
+    int16_t reserve(size_t size);
+
+    void free(int16_t fatStart);
+
+    bool __writeData(int16_t startFat, std::string data, int16_t ofset = 0);
+
+
 
     /// @brief return the Fat index to an empty file slot
     /// @return index or -1 if no empty slots
