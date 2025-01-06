@@ -1,5 +1,6 @@
 #include <fstream>
 #include <iostream>
+#include <stdint.h>
 
 #ifndef __DISK_H__
 #define __DISK_H__
