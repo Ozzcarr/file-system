@@ -6,28 +6,21 @@
 #include <iostream>
 #include <vector>
 
-size_t parse(std::string path_and_data, std::vector<std::string>& path,
-             std::string& data) {
-    size_t index = 0;
+size_t parsePath(std::string sPath, std::vector<std::string>& path) {
     path.clear();
-    data.clear();
-    if (path_and_data.size() == 0) return 0;
+    if (sPath.size() == 0) return -1;
 
     std::string fileName = "";
 
-    while (index < path_and_data.size()) {
-        if (path_and_data[index] == '/') {
+    for (size_t index = 0; index < sPath.size(); index++) {
+        if (sPath[index] == '/') {
             path.emplace_back(fileName);
             fileName = "";
-        } else if (path_and_data[index] == '\n' &&
-                   (index + 1) < path_and_data.size() &&
-                   path_and_data[index + 1] == '\n') {
+        } else if (sPath[index] == '\n') {
             if (fileName.size() > 0) path.emplace_back(fileName);
-            data = path_and_data.substr(index + 2);
-            return path_and_data.size() - index - 2;
+            return 0;
         } else
-            fileName += path_and_data[index];
-        index++;
+            fileName += sPath[index];
     }
     if (fileName.size() > 0) path.emplace_back(fileName);
     return 0;
@@ -286,12 +279,11 @@ int FS::format() {
 int FS::create(std::string filepath) {
     std::cout << "FS::create(" << filepath << ")\n";
 
-    std::string data;
     std::vector<std::string> path;
-    size_t dataSize = parse(filepath, path, data);
+    size_t dataSize = parsePath(filepath, path);
     dir_entry currentDir = this->workingDir;
 
-    if (path.size() < 1) return -1;
+    if (path.size() == 0) return -1;
 
     std::vector<std::string> some(path.begin(), path.end() - 1);
 
@@ -304,6 +296,9 @@ int FS::create(std::string filepath) {
     };
 
     strncpy(newFile.file_name, path.back().c_str(), 56);
+
+    std::string data;
+    std::getline(std::cin, data);
 
     if (!this->__create(workingDir, newFile, data)) return -1;
 
@@ -318,24 +313,44 @@ int FS::create(std::string filepath) {
 
 // cat <filepath> reads the content of a file and prints it on the screen
 int FS::cat(std::string filepath) {
-    dir_entry currentDir = this->workingDir;
-    this->__cd(currentDir, filepath);
-    int16_t fatIndex = currentDir.first_blk;
-    // while(this->fat[fatIndex] != FAT_EOF){
-    //     char dirBlock[BLOCK_SIZE];
-    //     this->disk.read(fatIndex, (uint8_t*)dirBlock);
-    //     std::cout << dirBlock;
-    //     fatIndex = this->fat[fatIndex];
-    // }
-    // char dirBlock[BLOCK_SIZE]{NULL};
-    // this->disk.read(fatIndex, (uint8_t*)dirBlock);
-    // std::cout << dirBlock << "\n";
-
-    while (fatIndex != FAT_EOF) {
-        char dirBlock[BLOCK_SIZE];
-        this->disk.read(fatIndex, (uint8_t*)dirBlock);
-        fatIndex = this->fat[fatIndex];
+    dir_entry dir = workingDir;
+    std::vector<std::string> path;
+    parsePath(filepath, path);
+    if(path.size() == 0) return -1;
+    if(path.size() > 1){
+        if(!__cd(dir, std::vector<std::string>(path.begin(), path.end() - 1))) return -1;
     }
+    dir_entry file;
+    if (!this->findDirEntry(dir, path.back(), file)) return -1;
+    int16_t nextFat = file.first_blk;
+    char dirBlock[BLOCK_SIZE];
+    std::string print;
+
+    // Go through each full dirBlock
+
+    for (int i = 0; i < (workingDir.size / BLOCK_SIZE); i++) {
+        if (nextFat == FAT_EOF) throw std::runtime_error("some shite went wrong");
+
+        this->disk.read(nextFat, (uint8_t*)dirBlock);
+        for (char c : dirBlock){
+            print += c;
+        }
+        nextFat = this->fat[nextFat];
+    }
+
+    // Go through the direntries in a non full dirblock
+    size_t rest = (workingDir.size & (BLOCK_SIZE - 1));
+    if (rest) {
+        if (nextFat == FAT_EOF) throw std::runtime_error("some shite went wrong");
+        this->disk.read(nextFat, (uint8_t*)dirBlock);
+        for (int i = 0; i < rest; i++){
+            print += dirBlock[i];
+        }
+    }
+    print += "\n";
+
+    std::cout << print;
+
     return 0;
 }
 
