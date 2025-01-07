@@ -63,14 +63,14 @@ void FS::free(int16_t fatStart) {
     }
 }
 
-bool FS::findDirEntry(dir_entry dir, std::string fileName, dir_entry& result) {
-    int fatIndex = dir.first_blk;
+bool FS::findDirEntry(dir_entry dir, std::string fileName, dir_entry& result, int16_t& fatIndex, int& blockIndex) {
+    fatIndex = dir.first_blk;
     std::array<dir_entry, 64> dirBlock;
     do {
         this->disk.read(fatIndex, (uint8_t*)dirBlock.data());
-        for (uint8_t i = 0; i < 64; i++) {
-            if (fileName.compare(0, 56, dirBlock[i].file_name) == 0) {
-                result = dirBlock[i];
+        for (blockIndex = 0; blockIndex < 64; blockIndex++) {
+            if (fileName.compare(0, 56, dirBlock[blockIndex].file_name) == 0) {
+                result = dirBlock[blockIndex];
                 return true;
             }
         }
@@ -79,14 +79,31 @@ bool FS::findDirEntry(dir_entry dir, std::string fileName, dir_entry& result) {
     return false;
 }
 
+bool FS::findDirEntry(dir_entry dir, std::string fileName, dir_entry& result) {
+    int16_t fatIndex;
+    int blockIndex;
+    return findDirEntry(dir, fileName, result, fatIndex, blockIndex);
+}
+
 bool FS::__cd(dir_entry& workingDir, const std::string& path, bool createDirs) {
     std::vector<std::string> pathv;
     parsePath(path, pathv);
     return this->__cd(workingDir, pathv, createDirs);
 }
 
-bool FS::__cdToFile(dir_entry& workingDir, const std::vector<std::string>& path,
-                    bool createDirs) {
+bool FS::__cd(dir_entry& workingDir, const std::vector<std::string>& path, bool createDirs) {
+    if (!this->__cdToFile(workingDir, path, createDirs)) return false;
+    if (workingDir.type == TYPE_FILE) return false;
+    return true;
+}
+
+bool FS::__cdToFile(dir_entry& workingDir, const std::string& path, bool createDirs) {
+    std::vector<std::string> pathv;
+    parsePath(path, pathv);
+    return this->__cdToFile(workingDir, pathv, createDirs);
+}
+
+bool FS::__cdToFile(dir_entry& workingDir, const std::vector<std::string>& path, bool createDirs) {
     for (std::string file : path) {
         if (!workingDir.type == TYPE_DIR) return false;
         if (!this->findDirEntry(workingDir, file, workingDir)) {
@@ -106,13 +123,6 @@ bool FS::__cdToFile(dir_entry& workingDir, const std::vector<std::string>& path,
                 return false;
         }
     }
-    return true;
-}
-
-bool FS::__cd(dir_entry& workingDir, const std::vector<std::string>& path,
-              bool createDirs) {
-    if (!this->__cdToFile(workingDir, path, createDirs)) return false;
-    if (workingDir.type == TYPE_FILE) return false;
     return true;
 }
 
@@ -156,8 +166,7 @@ bool FS::__writeData(int16_t startFat, std::string data, int16_t ofset) {
 
 bool FS::addDirEntry(dir_entry dir, dir_entry newEntry) {
     dir_entry temp;
-    if (this->findDirEntry(dir, std::string(newEntry.file_name), temp))
-        return false;
+    if (this->findDirEntry(dir, std::string(newEntry.file_name), temp)) return false;
 
     int16_t fatIndex = dir.first_blk;
     std::array<dir_entry, 64> dirBlock;
@@ -169,8 +178,7 @@ bool FS::addDirEntry(dir_entry dir, dir_entry newEntry) {
     int16_t dirEntryIndexInBlock = (dir.size & (BLOCK_SIZE - 1)) / 64;
 
     // if we don't have enough space in our directory for the dir_entry
-    if (dirEntryIndexInBlock ==
-        0) {  // I would say trust but don't the magicc might no be magiccing
+    if (dirEntryIndexInBlock == 0) {  // I would say trust but don't the magicc might no be magiccing
         int16_t newDirBlock = this->getEmptyFat();
         if (newDirBlock == -1) {
             return false;
@@ -191,9 +199,48 @@ bool FS::addDirEntry(dir_entry dir, dir_entry newEntry) {
     // update metadata for directory
     this->disk.read(dir.first_blk, (uint8_t*)dirBlock.data());
     dirBlock[0].size += 64;
-    if (this->workingDir.first_blk == dirBlock[0].first_blk)
-        this->workingDir = dirBlock[0];
+    if (this->workingDir.first_blk == dirBlock[0].first_blk) this->workingDir = dirBlock[0];
     this->disk.write(dir.first_blk, (uint8_t*)dirBlock.data());
+
+    return true;
+}
+
+bool FS::removeDirEntry(dir_entry dir, std::string fileName) {
+    int16_t removeBlockIndex;
+    int removeDirEntryIndex;
+    dir_entry entryToRemove;
+    if (!this->findDirEntry(dir, std::string(fileName), entryToRemove, removeBlockIndex, removeDirEntryIndex))
+        return false;
+
+    int16_t fatIndex = dir.first_blk;
+    while (this->fat[fatIndex] != FAT_EOF) {
+        fatIndex = this->fat[fatIndex];
+    }
+
+    int16_t dirEntryIndexInBlock = ((dir.size & (BLOCK_SIZE - 1)) / 64 - 1) % 64;
+
+    // Move last data to space where we remove
+    std::array<dir_entry, 64> dirBlock;
+    this->disk.read(fatIndex, (uint8_t*)dirBlock.data());
+    dir_entry entryToMove = dirBlock[dirEntryIndexInBlock];
+    this->disk.read(removeBlockIndex, (uint8_t*)dirBlock.data());
+    dirBlock[removeDirEntryIndex] = entryToMove;
+    this->disk.write(removeBlockIndex, (uint8_t*)dirBlock.data());
+
+    // Update metadata for directory
+    this->disk.read(dir.first_blk, (uint8_t*)dirBlock.data());
+    dirBlock[0].size -= 64;
+    if (this->workingDir.first_blk == dirBlock[0].first_blk) this->workingDir = dirBlock[0];
+    this->disk.write(dir.first_blk, (uint8_t*)dirBlock.data());
+
+    // Update EOF
+    if (dirEntryIndexInBlock == 0) {
+        this->fat[fatIndex] = FAT_FREE;
+        while (this->fat[this->fat[fatIndex]] != FAT_FREE) {
+            fatIndex = this->fat[fatIndex];
+        }
+        this->fat[fatIndex] = FAT_EOF;
+    }
 
     return true;
 }
@@ -281,8 +328,7 @@ int FS::create(std::string filepath) {
 
     std::vector<std::string> some(path.begin(), path.end() - 1);
 
-    this->__cd(currentDir,
-               std::vector<std::string>(path.begin(), path.end() - 1));
+    this->__cd(currentDir, std::vector<std::string>(path.begin(), path.end() - 1));
 
     dir_entry newFile{
         .type = TYPE_FILE,
@@ -312,8 +358,7 @@ int FS::cat(std::string filepath) {
     parsePath(filepath, path);
     if (path.size() == 0) return -1;
     if (path.size() > 1) {
-        if (!__cd(dir, std::vector<std::string>(path.begin(), path.end() - 1)))
-            return -1;
+        if (!__cd(dir, std::vector<std::string>(path.begin(), path.end() - 1))) return -1;
     }
     dir_entry file;
     if (!this->findDirEntry(dir, path.back(), file)) return -1;
@@ -324,8 +369,7 @@ int FS::cat(std::string filepath) {
     // Go through each full dirBlock
 
     for (int i = 0; i < (workingDir.size / BLOCK_SIZE); i++) {
-        if (nextFat == FAT_EOF)
-            throw std::runtime_error("some shite went wrong");
+        if (nextFat == FAT_EOF) throw std::runtime_error("some shite went wrong");
 
         this->disk.read(nextFat, (uint8_t*)dirBlock);
         for (char c : dirBlock) {
@@ -337,8 +381,7 @@ int FS::cat(std::string filepath) {
     // Go through the direntries in a non full dirblock
     size_t rest = (workingDir.size & (BLOCK_SIZE - 1));
     if (rest) {
-        if (nextFat == FAT_EOF)
-            throw std::runtime_error("some shite went wrong");
+        if (nextFat == FAT_EOF) throw std::runtime_error("some shite went wrong");
         this->disk.read(nextFat, (uint8_t*)dirBlock);
         for (int i = 0; i < rest; i++) {
             print += dirBlock[i];
@@ -351,15 +394,13 @@ int FS::cat(std::string filepath) {
     return 0;
 }
 
-void FS::__processDirBlock(int16_t fatIndex, size_t count,
-                           std::string& output) {
+void FS::__processDirBlock(int16_t fatIndex, size_t count, std::string& output) {
     std::array<dir_entry, 64> dirBlock;
     this->disk.read(fatIndex, (uint8_t*)dirBlock.data());
     for (size_t i = 0; i < count; i++) {
         // Print if not hidden file
         if (dirBlock[i].file_name[0] != '.')
-            output += std::string(dirBlock[i].file_name) + "  " +
-                      std::to_string(dirBlock[i].size) + "\n";
+            output += std::string(dirBlock[i].file_name) + "  " + std::to_string(dirBlock[i].size) + "\n";
     }
 }
 
@@ -370,8 +411,7 @@ int FS::ls() {
 
     // Process each full dirBlock
     for (int i = 0; i < (workingDir.size / BLOCK_SIZE); i++) {
-        if (nextFat == FAT_EOF)
-            throw std::runtime_error("some shite went wrong");
+        if (nextFat == FAT_EOF) throw std::runtime_error("some shite went wrong");
 
         this->__processDirBlock(nextFat, 64, print);
         nextFat = this->fat[nextFat];
@@ -380,8 +420,7 @@ int FS::ls() {
     // Process the remaining entries in a non-full dirBlock
     size_t rest = (workingDir.size & (BLOCK_SIZE - 1)) / 64;
     if (rest) {
-        if (nextFat == FAT_EOF)
-            throw std::runtime_error("some shite went wrong");
+        if (nextFat == FAT_EOF) throw std::runtime_error("some shite went wrong");
 
         this->__processDirBlock(nextFat, rest, print);
     }
@@ -403,18 +442,14 @@ int FS::cp(std::string sourcepath, std::string destpath) {
     if (path.size() == 0) return -1;
 
     // find src dir
-    if (path.size() > 1 && !this->__cd(src, std::vector<std::string>(
-                                                path.begin(), path.end() - 1)))
-        return -1;
+    if (path.size() > 1 && !this->__cd(src, std::vector<std::string>(path.begin(), path.end() - 1))) return -1;
     // find src
     if (!this->findDirEntry(src, path.back(), src)) return -1;
 
     path.empty();
     parsePath(destpath, path);
 
-    if (path.size() > 1 && !this->__cd(dest, std::vector<std::string>(
-                                                 path.begin(), path.end() - 1)))
-        return -1;
+    if (path.size() > 1 && !this->__cd(dest, std::vector<std::string>(path.begin(), path.end() - 1))) return -1;
 
     dir_entry filecpy = src;
 
@@ -455,7 +490,18 @@ int FS::mv(std::string sourcepath, std::string destpath) {
 
 // rm <filepath> removes / deletes the file <filepath>
 int FS::rm(std::string filepath) {
-    std::cout << "FS::rm(" << filepath << ")\n";
+    dir_entry dir = this->workingDir;
+    std::vector<std::string> path;
+    parsePath(filepath, path);
+    dir_entry file;
+
+    // find src dir
+    if (path.size() > 1 && !this->__cd(dir, std::vector<std::string>(path.begin(), path.end() - 1))) return -1;
+    // find src
+    if (!this->findDirEntry(dir, path.back(), file)) return -1;
+
+    if (!this->removeDirEntry(dir, file.file_name)) return -1;
+    this->free(dir.first_blk);
     return 0;
 }
 
@@ -503,7 +549,7 @@ int FS::append(std::string filepath1, std::string filepath2) {
         destFat = this->fat[destFat];
         if (destFat == FAT_EOF) return 0;
 
-        //copy until srcblock is empty
+        // copy until srcblock is empty
         for (int i = 0; i < offset; i++) {
             destData[i] = srcData[i - offset + BLOCK_SIZE];
         }

@@ -41,16 +41,22 @@ class FS {
     /// @param dirFirstBlock
     /// @param fileName
     /// @return
+    bool findDirEntry(dir_entry dir, std::string fileName, dir_entry& result, int16_t& fatIndex, int& blockIndex);
+
     bool findDirEntry(dir_entry dir, std::string fileName, dir_entry& result);
 
     bool __cd(dir_entry& workingDir, const std::string& path, bool createDirs = false);
 
+    bool __cd(dir_entry& workingDir, const std::vector<std::string>& path, bool createDirs = false);
+
+    bool __cdToFile(dir_entry& workingDir, const std::string& path, bool createDirs = false);
+
     bool __cdToFile(dir_entry& workingDir, const std::vector<std::string>& path,
               bool createDirs = false);
 
-    bool __cd(dir_entry& workingDir, const std::vector<std::string>& path, bool createDirs = false);
-
     bool addDirEntry(dir_entry dir, dir_entry newEntry);
+
+    bool removeDirEntry(dir_entry dir, std::string fileName);
 
     bool __create(const dir_entry dir, dir_entry& filedata, std::string data);
 
