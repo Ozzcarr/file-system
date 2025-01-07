@@ -517,7 +517,7 @@ int FS::rm(std::string filepath) {
     if (!this->findDirEntry(dir, path.back(), file)) return -1;
 
     if (!this->removeDirEntry(dir, file.file_name)) return -1;
-    this->free(dir.first_blk);
+    this->free(file.first_blk);
     return 0;
 }
 
