@@ -622,24 +622,8 @@ int FS::append(std::string filepath1, std::string filepath2) {
 // mkdir <dirpath> creates a new sub-directory with the name <dirpath>
 // in the current directory
 int FS::mkdir(std::string dirpath) {
-    std::cout << "FS::mkdir(" << dirpath << ")\n";
-    std::vector<std::string> path;
-    parsePath(dirpath, path);
-    dir_entry dir = this->workingDir;
-
-    if (path.size() > 1) {
-        this->__cd(dir, std::vector<std::string>(path.begin(), path.end() - 1));
-    }
-
-    dir_entry newDir{
-        .type = TYPE_DIR,
-        .access_rights = READ | WRITE,
-    };
-
-    path.back().copy(newDir.file_name, 56);
-
-    if (!this->__create(dir, newDir, "")) return -1;
-
+    dir_entry dir2 = this->workingDir;
+    this->__cd(dir2, dirpath, true);
     return 0;
 }
 
