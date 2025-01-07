@@ -54,11 +54,11 @@ class FS {
     bool __cdToFile(dir_entry& workingDir, const std::vector<std::string>& path,
               bool createDirs = false);
 
-    bool addDirEntry(dir_entry dir, dir_entry newEntry);
+    bool addDirEntry(dir_entry& dir, dir_entry newEntry);
 
     bool removeDirEntry(dir_entry dir, std::string fileName);
 
-    bool __create(const dir_entry dir, dir_entry& filedata, std::string data);
+    bool __create(dir_entry dir, dir_entry& filedata, std::string data);
 
     int16_t reserve(size_t size);
 
