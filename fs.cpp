@@ -64,18 +64,34 @@ void FS::free(int16_t fatStart) {
 }
 
 bool FS::findDirEntry(dir_entry dir, std::string fileName, dir_entry& result, int16_t& fatIndex, int& blockIndex) {
-    fatIndex = dir.first_blk;
+    fatIndex  = dir.first_blk;
     std::array<dir_entry, 64> dirBlock;
-    do {
+
+    // Process each full dirBlock
+    for (int i = 0; i < (dir.size / BLOCK_SIZE); i++) {
+        if (fatIndex == FAT_EOF) throw std::runtime_error("some shite went wrong");
         this->disk.read(fatIndex, (uint8_t*)dirBlock.data());
-        for (blockIndex = 0; blockIndex < 64; blockIndex++) {
+        for (blockIndex = 0; blockIndex < 64; blockIndex++){
             if (fileName.compare(0, 56, dirBlock[blockIndex].file_name) == 0) {
                 result = dirBlock[blockIndex];
                 return true;
             }
         }
         fatIndex = this->fat[fatIndex];
-    } while (fatIndex != FAT_EOF);
+    }
+
+    // Process the remaining entries in a non-full dirBlock
+    size_t rest = (workingDir.size & (BLOCK_SIZE - 1)) / 64;
+    if (rest) {
+        if (fatIndex == FAT_EOF) throw std::runtime_error("some shite went wrong");
+        this->disk.read(fatIndex, (uint8_t*)dirBlock.data());
+        for (blockIndex = 0; blockIndex < rest; blockIndex++){
+            if (fileName.compare(0, 56, dirBlock[blockIndex].file_name) == 0) {
+                result = dirBlock[blockIndex];
+                return true;
+            }
+        }
+    }
     return false;
 }
 
