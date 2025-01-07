@@ -351,7 +351,8 @@ int FS::create(std::string filepath) {
         .access_rights = READ | WRITE,
     };
 
-    strncpy(newFile.file_name, path.back().c_str(), 56);
+    if (path.back().size() > 55) return -1;
+    path.back().copy(newFile.file_name, 56);
 
     std::string data;
     std::getline(std::cin, data);
