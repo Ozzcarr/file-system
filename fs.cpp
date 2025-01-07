@@ -201,7 +201,7 @@ bool FS::__create(const dir_entry dir, dir_entry& metadata, std::string data) {
     metadata.size = data.length();
     if (metadata.type == TYPE_DIR) metadata.size += 128;
 
-    if( !this->addDirEntry(dir, metadata) ) return -1;
+    if( !this->addDirEntry(dir, metadata) ) return false;
 
     // write the data to the new file
     std::string extra;
@@ -388,8 +388,11 @@ int FS::ls() {
 // <sourcepath> to a new file <destpath>
 int FS::cp(std::string sourcepath, std::string destpath) {
     // work in progress
+    std::cout << sourcepath << " " << destpath << "\n";
     dir_entry src = this->workingDir;
     dir_entry dest = this->workingDir;
+
+
     std::vector<std::string> path;
     parsePath(sourcepath, path);
     if (path.size() == 0) return -1;
@@ -401,7 +404,7 @@ int FS::cp(std::string sourcepath, std::string destpath) {
     // find src
     if (!this->findDirEntry(src, path.back(), src)) return -1;
 
-    path.clear();
+    path.empty();
     parsePath(destpath, path);
 
     if (path.size() > 1 && !this->__cd(dest, std::vector<std::string>(
@@ -411,6 +414,7 @@ int FS::cp(std::string sourcepath, std::string destpath) {
     dir_entry filecpy = src;
 
     if(!this->findDirEntry(dest, path.back(), dest)) {
+        for (int i = 0; i < 56; i++) filecpy.file_name[i] = 0;
         path.back().copy(filecpy.file_name, 56);
     }
     else {
