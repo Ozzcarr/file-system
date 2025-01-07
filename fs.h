@@ -45,6 +45,9 @@ class FS {
 
     bool __cd(dir_entry& workingDir, const std::string& path, bool createDirs = false);
 
+    bool __cdToFile(dir_entry& workingDir, const std::vector<std::string>& path,
+              bool createDirs = false);
+
     bool __cd(dir_entry& workingDir, const std::vector<std::string>& path, bool createDirs = false);
 
     bool addDirEntry(dir_entry dir, dir_entry newEntry);
