@@ -416,7 +416,7 @@ void FS::__processDirBlock(int16_t fatIndex, size_t count, std::string& output) 
     for (size_t i = 0; i < count; i++) {
         // Print if not hidden file
         if (dirBlock[i].file_name[0] != '.')
-            output += std::string(dirBlock[i].file_name) + "  " + std::to_string(dirBlock[i].size) + "\n";
+            output += std::string(dirBlock[i].file_name) + "\t " + std::to_string(dirBlock[i].size) + "\n";
     }
 }
 
