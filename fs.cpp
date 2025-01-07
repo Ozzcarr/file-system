@@ -366,7 +366,7 @@ int FS::ls() {
         if (nextFat == FAT_EOF)
             throw std::runtime_error("some shite went wrong");
 
-        FS::__processDirBlock(nextFat, 64, print);
+        this->__processDirBlock(nextFat, 64, print);
         nextFat = this->fat[nextFat];
     }
 
@@ -376,7 +376,7 @@ int FS::ls() {
         if (nextFat == FAT_EOF)
             throw std::runtime_error("some shite went wrong");
 
-        FS:__processDirBlock(nextFat, rest, print);
+        this->__processDirBlock(nextFat, rest, print);
     }
 
     std::cout << print;
