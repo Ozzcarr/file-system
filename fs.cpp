@@ -81,38 +81,9 @@ bool FS::findDirEntry(dir_entry dir, std::string fileName, dir_entry& result) {
 }
 
 bool FS::__cd(dir_entry& workingDir, const std::string& path, bool createDirs) {
-    size_t index = 0;
-    std::string nextDir;
-    while (index < path.size()) {
-        if (path[index] == '/') {
-            if (!this->findDirEntry(workingDir, nextDir, workingDir)) {
-                if (createDirs) {
-                    // throw std::runtime_error("Nah");
-                    dir_entry newDir{
-                        .type = TYPE_DIR,
-                        .access_rights = WRITE | READ,
-                    };
-                    strncpy(newDir.file_name, nextDir.c_str(), 56);
-                    if (!this->__create(workingDir, newDir, "")) return false;
-                    if (!this->findDirEntry(workingDir, nextDir, workingDir))
-                        throw std::runtime_error(
-                            "Thingy that should not possibly have failed "
-                            "failed, How???? Line:" +
-                            std::to_string(__LINE__) + " " +
-                            "File: " + __FILE__);
-                } else
-                    return false;
-            }
-            nextDir = "";
-        } else {
-            nextDir += path[index];
-        }
-        index++;
-    }
-    if (nextDir.size() > 0) {
-        if (!this->findDirEntry(workingDir, nextDir, workingDir)) return false;
-    }
-    return true;
+    std::vector<std::string> pathv;
+    parsePath(path, pathv);
+    return this->__cd(workingDir, pathv, createDirs);
 }
 
 bool FS::__cd(dir_entry& workingDir, const std::vector<std::string>& path,
@@ -120,7 +91,6 @@ bool FS::__cd(dir_entry& workingDir, const std::vector<std::string>& path,
     for (std::string file : path) {
         if (!this->findDirEntry(workingDir, file, workingDir)) {
             if (createDirs) {
-                // throw std::runtime_error("Nah");
                 dir_entry newDir{
                     .type = TYPE_DIR,
                     .access_rights = WRITE | READ,
@@ -135,6 +105,8 @@ bool FS::__cd(dir_entry& workingDir, const std::vector<std::string>& path,
             } else
                 return false;
         }
+        std::cout << workingDir.type << "\n";
+        if ( ! workingDir.type == TYPE_DIR ) return false;
     }
     return true;
 }
@@ -177,14 +149,13 @@ bool FS::__writeData(int16_t startFat, std::string data, int16_t ofset) {
     return true;
 }
 
-bool FS::__create(dir_entry dir, dir_entry metadata, std::string data) {
+bool FS::__create(const dir_entry dir, dir_entry& metadata, std::string data) {
     int fatIndex = dir.first_blk;
     std::array<dir_entry, 64> dirBlock;
 
     while (this->fat[fatIndex] != FAT_EOF) {
         fatIndex = this->fat[fatIndex];
     }
-
 
     // reserve space that the new file needs
     int16_t startfat = this->reserve(data.length());
@@ -375,7 +346,6 @@ int FS::ls() {
 
     // Go through the direntries in a non full dirblock
     size_t rest = (workingDir.size & (BLOCK_SIZE - 1)) / 64;
-    std::cout << rest << "\n";
     if (rest) {
         if (nextFat == FAT_EOF) throw std::runtime_error("some shite went wrong");
         this->disk.read(nextFat, (uint8_t*)dirBlock.data());
@@ -395,10 +365,24 @@ int FS::cp(std::string sourcepath, std::string destpath) {
     // work in progress
     dir_entry src;
     dir_entry dest;
+    std::vector<std::string> path;
+    parsePath(destpath, path);
+    if (path.size() == 0 ) return -1;
     if (!this->__cd(src, sourcepath)) return -1;
-    if (!this->__cd(dest, destpath)) return -1;
 
-    //this->__create(dest, )
+    dest = src;
+    if (path.size() > 1)
+        if (!this->__cd(dest, std::vector<std::string>(path.begin(), path.end() - 1) )) return -1;
+
+    path.back().copy(dest.file_name, 56);
+
+    if(!this->__create(dest, dest, "")) return -1;
+
+    this->fat[dest.first_blk] = FAT_FREE;
+
+    int16_t fats = this->reserve(dest.size);
+    if (fats == -1) return -1;
+    dest.first_blk = fats;
 
     int16_t nextFat = src.first_blk;
     while(nextFat != FAT_EOF){
@@ -416,6 +400,7 @@ int FS::cp(std::string sourcepath, std::string destpath) {
 // dest is a directory)
 int FS::mv(std::string sourcepath, std::string destpath) {
     std::cout << "FS::mv(" << sourcepath << "," << destpath << ")\n";
+
     return 0;
 }
 
@@ -443,7 +428,7 @@ int FS::mkdir(std::string dirpath) {
 // <dirpath>
 int FS::cd(std::string dirpath) {
     std::cout << "FS::cd(" << dirpath << ")\n";
-    dir_entry newWorkingDir;
+    dir_entry newWorkingDir = this->workingDir;
     if( ! this->__cd(newWorkingDir, dirpath)) return -1;
     this->workingDir = newWorkingDir;
     return 0;

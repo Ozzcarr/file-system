@@ -35,6 +35,8 @@ class FS {
 
     dir_entry workingDir;
 
+    void updateDirEntry(dir_entry old, dir_entry updated);
+
     /// @brief
     /// @param dirFirstBlock
     /// @param fileName
@@ -46,7 +48,7 @@ class FS {
     bool __cd(dir_entry& workingDir, const std::vector<std::string>& path, bool createDirs = false);
 
 
-    bool __create(dir_entry dir, dir_entry filedata, std::string data);
+    bool __create(const dir_entry dir, dir_entry& filedata, std::string data);
 
     int16_t reserve(size_t size);
 
