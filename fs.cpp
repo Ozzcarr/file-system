@@ -230,8 +230,8 @@ bool FS::addDirEntry(dir_entry& dir, dir_entry newEntry) {
     this->disk.write(dir.first_blk, (uint8_t*)dirBlock.data());
 
     // update daddy folders ref of directory, this part is a bit sketchy.
-    // ".." might not need size, currently it does to make the workingdir contain
-    // correct size but could insted fetch this from "." file after cd
+    // ".." might not need size, currently it does to make the workingdir
+    // contain correct size but could insted fetch this from "." file after cd
     dir_entry result;
     int blockIndex;
     std::cout << "../" + std::string(dir.file_name) << "\n";
@@ -449,9 +449,9 @@ void FS::__processDirBlock(int16_t fatIndex, size_t count,
     this->disk.read(fatIndex, (uint8_t*)dirBlock.data());
     for (size_t i = 0; i < count; i++) {
         // Print if not hidden file
-        // if (dirBlock[i].file_name[0] != '.')
-        output += std::string(dirBlock[i].file_name) + "\t " +
-                  std::to_string(dirBlock[i].size) + "\n";
+        if (dirBlock[i].file_name[0] != '.')
+            output += std::string(dirBlock[i].file_name) + "\t " +
+                      std::to_string(dirBlock[i].size) + "\n";
     }
 }
 
