@@ -148,6 +148,10 @@ bool FS::__writeData(int16_t startFat, std::string data, int16_t ofset) {
 }
 
 bool FS::addDirEntry(dir_entry dir, dir_entry newEntry) {
+    dir_entry temp;
+    if (this->findDirEntry(dir, std::string(newEntry.file_name), temp))
+        return false;
+
     int16_t fatIndex = dir.first_blk;
     std::array<dir_entry, 64> dirBlock;
 
@@ -180,6 +184,8 @@ bool FS::addDirEntry(dir_entry dir, dir_entry newEntry) {
     // update metadata for directory
     this->disk.read(dir.first_blk, (uint8_t*)dirBlock.data());
     dirBlock[0].size += 64;
+    if (this->workingDir.first_blk == dirBlock[0].first_blk)
+        this->workingDir = dirBlock[0];
     this->disk.write(dir.first_blk, (uint8_t*)dirBlock.data());
 
     return true;
@@ -195,7 +201,7 @@ bool FS::__create(const dir_entry dir, dir_entry& metadata, std::string data) {
     metadata.size = data.length();
     if (metadata.type == TYPE_DIR) metadata.size += 128;
 
-    this->addDirEntry(dir, metadata);
+    if( !this->addDirEntry(dir, metadata) ) return -1;
 
     // write the data to the new file
     std::string extra;
@@ -382,36 +388,51 @@ int FS::ls() {
 // <sourcepath> to a new file <destpath>
 int FS::cp(std::string sourcepath, std::string destpath) {
     // work in progress
-    dir_entry src;
-    dir_entry dest;
+    dir_entry src = this->workingDir;
+    dir_entry dest = this->workingDir;
     std::vector<std::string> path;
-    parsePath(destpath, path);
+    parsePath(sourcepath, path);
     if (path.size() == 0) return -1;
-    if (!this->__cd(src, sourcepath)) return -1;
 
-    dest = src;
-    if (path.size() > 1)
-        if (!this->__cd(dest,
-                        std::vector<std::string>(path.begin(), path.end() - 1)))
-            return -1;
+    // find src dir
+    if (path.size() > 1 && !this->__cd(src, std::vector<std::string>(
+                                                path.begin(), path.end() - 1)))
+        return -1;
+    // find src
+    if (!this->findDirEntry(src, path.back(), src)) return -1;
 
-    path.back().copy(dest.file_name, 56);
+    path.clear();
+    parsePath(destpath, path);
 
-    if (!this->__create(dest, dest, "")) return -1;
+    if (path.size() > 1 && !this->__cd(dest, std::vector<std::string>(
+                                            path.begin(), path.end() - 1)))
+    return -1;
 
-    this->fat[dest.first_blk] = FAT_FREE;
+    dir_entry filecpy = src;
 
-    int16_t fats = this->reserve(dest.size);
-    if (fats == -1) return -1;
-    dest.first_blk = fats;
-
-    int16_t nextFat = src.first_blk;
-    while (nextFat != FAT_EOF) {
-        std::array<dir_entry, 64> dirBlock;
-        this->disk.read(nextFat, (uint8_t*)dirBlock.data());
+    if(!this->findDirEntry(dest, path.back(), dest)) {
+        path.back().copy(filecpy.file_name, 56);
+    }
+    else {
+        if (dest.type == TYPE_FILE) return -1;
     }
 
-    std::cout << "FS::cp(" << sourcepath << "," << destpath << ")\n";
+    int16_t newFats = this->reserve(src.size);
+    if(newFats == -1) return -1;
+    filecpy.first_blk = newFats;
+
+    if(!this->addDirEntry(dest, filecpy)) return -1;
+
+    int16_t nextSrcFat = src.first_blk;
+    int16_t nextTargetFat = filecpy.first_blk;
+    while (nextSrcFat != FAT_EOF) {
+        uint8_t block[BLOCK_SIZE]{0};
+        this->disk.read(nextSrcFat, block);
+        this->disk.write(nextTargetFat, block);
+        nextSrcFat = this->fat[nextSrcFat];
+        nextTargetFat = this->fat[nextTargetFat];
+    }
+
     return 0;
 }
 
