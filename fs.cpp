@@ -236,7 +236,14 @@ int FS::format() {
     dir_entry directories[64] = {// Root dir metadata
                                  {
                                      .file_name = ".",
-                                     .size = 64,
+                                     .size = 128,
+                                     .first_blk = 0,
+                                     .type = TYPE_DIR,
+                                     .access_rights = READ | WRITE,
+                                 },
+                                 {
+                                     .file_name = "..",
+                                     .size = 128,
                                      .first_blk = 0,
                                      .type = TYPE_DIR,
                                      .access_rights = READ | WRITE,
@@ -331,36 +338,39 @@ int FS::cat(std::string filepath) {
     return 0;
 }
 
-// ls lists the content in the currect directory (files and sub-directories)
+
+void FS::__processDirBlock(int16_t fatIndex, size_t count, std::string& output) {
+    std::array<dir_entry, 64> dirBlock;
+    this->disk.read(fatIndex, (uint8_t*)dirBlock.data());
+    for (size_t i = 0; i < count; i++) {
+        // Print if not hidden file
+        if (dirBlock[i].file_name[0] != '.')
+            output += std::string(dirBlock[i].file_name) + "  " +
+                    std::to_string(dirBlock[i].size) + "\n";
+    }
+}
+
+// ls lists the content in the current directory (files and sub-directories)
 int FS::ls() {
     int16_t nextFat = this->workingDir.first_blk;
-    std::array<dir_entry, 64> dirBlock;
     std::string print("name\t size\n");
 
-    // Go through each full dirBlock
-
+    // Process each full dirBlock
     for (int i = 0; i < (workingDir.size / BLOCK_SIZE); i++) {
         if (nextFat == FAT_EOF)
             throw std::runtime_error("some shite went wrong");
 
-        this->disk.read(nextFat, (uint8_t*)dirBlock.data());
-        for (dir_entry dir : dirBlock) {
-            print += std::string(dir.file_name) + "  " +
-                     std::to_string(dir.size) + "\n";
-        }
+        FS::__processDirBlock(nextFat, 64, print);
         nextFat = this->fat[nextFat];
     }
 
-    // Go through the direntries in a non full dirblock
+    // Process the remaining entries in a non-full dirBlock
     size_t rest = (workingDir.size & (BLOCK_SIZE - 1)) / 64;
     if (rest) {
         if (nextFat == FAT_EOF)
             throw std::runtime_error("some shite went wrong");
-        this->disk.read(nextFat, (uint8_t*)dirBlock.data());
-        for (int i = 0; i < rest; i++) {
-            print += std::string(dirBlock[i].file_name) + "  " +
-                     std::to_string(dirBlock[i].size) + "\n";
-        }
+
+        FS:__processDirBlock(nextFat, rest, print);
     }
 
     std::cout << print;
