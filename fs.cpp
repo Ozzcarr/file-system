@@ -234,7 +234,6 @@ bool FS::addDirEntry(dir_entry& dir, dir_entry newEntry) {
     // contain correct size but could insted fetch this from "." file after cd
     dir_entry result;
     int blockIndex;
-    std::cout << "../" + std::string(dir.file_name) << "\n";
     temp = dir;
     this->__cd(temp, "..");
     this->findDirEntry(temp, std::string(dir.file_name), result, fatIndex,
