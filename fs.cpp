@@ -355,14 +355,15 @@ int FS::format() {
     this->disk.write(ROOT_BLOCK, (uint8_t*)directories);
     this->disk.write(FAT_BLOCK, (uint8_t*)(this->fat));
     this->workingDir = directories[0];
+    dir_entry root = directories[0];
+    std::string("root").copy(root.file_name, 56);
+    this->workingPath.emplace_back(root);
     return 0;
 }
 
 // create <filepath> creates a new file on the disk, the data content is
 // written on the following rows (ended with an empty row)
 int FS::create(std::string filepath) {
-    std::cout << "FS::create(" << filepath << ")\n";
-
     std::vector<std::string> path;
     size_t dataSize = parsePath(filepath, path);
     dir_entry currentDir = this->workingDir;
@@ -629,23 +630,77 @@ int FS::mkdir(std::string dirpath) {
 // cd <dirpath> changes the current (working) directory to the directory named
 // <dirpath>
 int FS::cd(std::string dirpath) {
-    std::cout << "FS::cd(" << dirpath << ")\n";
     dir_entry newWorkingDir = this->workingDir;
-    if (!this->__cd(newWorkingDir, dirpath)) return -1;
+    std::vector<std::string> path;
+    parsePath(dirpath, path);
+    std::vector<dir_entry> newWorkingPath(this->workingPath);
+    for (std::string dirName : path) {
+        if (!this->findDirEntry(newWorkingDir, dirName, newWorkingDir))
+            return -1;
+        if (newWorkingDir.type != TYPE_DIR) return -1;
+        if (dirName == "..") {
+            if (newWorkingPath.size() > 1) {
+                newWorkingPath.pop_back();
+                newWorkingPath.back().size = newWorkingDir.size;
+                newWorkingPath.back().first_blk = newWorkingDir.first_blk;
+                newWorkingPath.back().access_rights =
+                    newWorkingDir.access_rights;
+            }
+        } else if (dirName != ".") {
+            newWorkingPath.emplace_back(newWorkingDir);
+        }
+    }
     this->workingDir = newWorkingDir;
+    this->workingPath = newWorkingPath;
     return 0;
 }
 
 // pwd prints the full path, i.e., from the root directory, to the current
 // directory, including the currect directory name
 int FS::pwd() {
-    std::cout << "FS::pwd()\n";
+    std::string path;
+
+    for (dir_entry dir : this->workingPath) {
+        path += std::string(dir.file_name) + "/";
+    }
+    std::cout << path << "\n";
     return 0;
 }
 
 // chmod <accessrights> <filepath> changes the access rights for the
 // file <filepath> to <accessrights>.
 int FS::chmod(std::string accessrights, std::string filepath) {
-    std::cout << "FS::chmod(" << accessrights << "," << filepath << ")\n";
+    if (accessrights.size() > 3) return -1;
+    uint8_t accessRightBin = 0;
+    if (accessrights.find('r') != accessrights.size()) accessRightBin |= READ;
+    if (accessrights.find('w') != accessrights.size()) accessRightBin |= WRITE;
+    if (accessrights.find('x') != accessrights.size())
+        accessRightBin |= EXECUTE;
+
+    std::vector<std::string> path;
+    parsePath(filepath, path);
+
+    dir_entry dir = this->workingDir;
+    if (path.size() > 1) {
+        this->__cd(dir, std::vector<std::string>(path.begin(), path.end() - 1));
+    }
+
+    dir_entry target_dir;
+    int16_t fatIndex;
+    int blockIndex;
+    this->findDirEntry(dir, path.back(), target_dir, fatIndex, blockIndex);
+
+    std::array<dir_entry, 64> dirBlock;
+    this->disk.read(fatIndex, (uint8_t*)dirBlock.data());
+    dirBlock[blockIndex].access_rights = accessRightBin;
+    this->disk.write(fatIndex, (uint8_t*)dirBlock.data());
+
+    this->disk.read(target_dir.first_blk, (uint8_t*)dirBlock.data());
+    dirBlock[0].access_rights = accessRightBin;
+    this->disk.write(target_dir.first_blk, (uint8_t*)dirBlock.data());
+
+    if (target_dir.first_blk == this->workingDir.first_blk)
+        this->workingDir.access_rights = accessRightBin;
+
     return 0;
 }

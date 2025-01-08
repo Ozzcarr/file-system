@@ -35,6 +35,8 @@ class FS {
 
     dir_entry workingDir;
 
+    std::vector<dir_entry> workingPath;
+
     void updateDirEntry(dir_entry old, dir_entry updated);
 
     /// @brief
