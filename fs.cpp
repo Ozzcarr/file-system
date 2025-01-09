@@ -380,8 +380,10 @@ int FS::create(std::string filepath) {
     if (path.back().size() > 55) return -1;
     path.back().copy(newFile.file_name, 56);
 
-    std::string data;
-    std::getline(std::cin, data);
+    std::string data, line;
+    while (std::getline(std::cin, line) && !line.empty()) {
+        data += line + "\n";
+    }
 
     if (!this->__create(workingDir, newFile, data)) return -1;
 
