@@ -355,9 +355,6 @@ int FS::format() {
     this->disk.write(ROOT_BLOCK, (uint8_t*)directories);
     this->disk.write(FAT_BLOCK, (uint8_t*)(this->fat));
     this->workingDir = directories[0];
-    dir_entry root = directories[0];
-    std::string("root").copy(root.file_name, 56);
-    this->workingPath.emplace_back(root);
     return 0;
 }
 
@@ -660,7 +657,7 @@ int FS::cd(std::string dirpath) {
 // pwd prints the full path, i.e., from the root directory, to the current
 // directory, including the currect directory name
 int FS::pwd() {
-    std::string path;
+    std::string path = "/";
 
     for (dir_entry dir : this->workingPath) {
         path += std::string(dir.file_name) + "/";
