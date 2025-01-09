@@ -623,6 +623,8 @@ int FS::append(std::string filepath1, std::string filepath2) {
 // in the current directory
 int FS::mkdir(std::string dirpath) {
     dir_entry dir2 = this->workingDir;
+    if (this->__cd(dir2, dirpath)) return -1;
+    dir2 = this->workingDir;
     this->__cd(dir2, dirpath, true);
     return 0;
 }
