@@ -58,7 +58,7 @@ class FS {
 
     bool addDirEntry(dir_entry& dir, dir_entry newEntry);
 
-    bool removeDirEntry(dir_entry dir, std::string fileName);
+    bool removeDirEntry(dir_entry& dir, std::string fileName);
 
     bool __create(dir_entry dir, dir_entry& filedata, std::string data);
 
