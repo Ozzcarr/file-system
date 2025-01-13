@@ -354,7 +354,7 @@ int FS::create(std::string filepath) {
 
     if (path.size() == 0) return -1;
 
-    if (!this->__cd(currentDir,
+    if (path.size() > 1 && !this->__cd(currentDir,
                     std::vector<std::string>(path.begin(), path.end() - 1)))
         return -1;
 
@@ -373,7 +373,7 @@ int FS::create(std::string filepath) {
         data += line + "\n";
     }
 
-    if (!this->__create(workingDir, newFile, data)) return -1;
+    if (!this->__create(currentDir, newFile, data)) return -1;
 
     return 0;
 }
