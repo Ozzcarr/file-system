@@ -60,7 +60,7 @@ class FS {
 
     bool removeDirEntry(dir_entry& dir, std::string fileName);
 
-    bool __create(dir_entry dir, dir_entry& filedata, std::string data);
+    bool __create(dir_entry dir, dir_entry& filedata, const std::string& data);
 
     int16_t reserve(size_t size);
 
