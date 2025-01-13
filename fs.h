@@ -68,8 +68,6 @@ class FS {
 
     bool __writeData(int16_t startFat, std::string data, int16_t ofset = 0);
 
-    void __processDirBlock(int16_t fatIndex, size_t count, std::string& output);
-
 
     /// @brief return the Fat index to an empty file slot
     /// @return index or -1 if no empty slots
