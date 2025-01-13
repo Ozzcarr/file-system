@@ -402,7 +402,6 @@ int FS::cat(std::string filepath) {
             print += dirBlock[i];
         }
     }
-    print += "\n";
 
     std::cout << print;
 
