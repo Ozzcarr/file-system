@@ -386,23 +386,17 @@ int FS::create(std::string filepath) {
 
 // cat <filepath> reads the content of a file and prints it on the screen
 int FS::cat(std::string filepath) {
-    dir_entry dir = workingDir;
-    std::vector<std::string> path;
-    parsePath(filepath, path);
-    if (path.size() == 0) return -1;
-    if (path.size() > 1) {
-        if (!__cd(dir, std::vector<std::string>(path.begin(), path.end() - 1)))
-            return -1;
-    }
-    dir_entry file;
-    if (!this->findDirEntry(dir, path.back(), file)) return -1;
+    dir_entry file = workingDir;
+    if(!this->__cdToFile(file, filepath, false)) return -1;
+
+    if (file.type != TYPE_FILE) return -1;
+
     int16_t nextFat = file.first_blk;
     char dirBlock[BLOCK_SIZE];
     std::string print;
 
     // Go through each full dirBlock
-
-    for (int i = 0; i < (workingDir.size / BLOCK_SIZE); i++) {
+    for (int i = 0; i < (file.size / BLOCK_SIZE); i++) {
         if (nextFat == FAT_EOF)
             throw std::runtime_error("some shite went wrong");
 
@@ -414,7 +408,7 @@ int FS::cat(std::string filepath) {
     }
 
     // Go through the direntries in a non full dirblock
-    size_t rest = (workingDir.size & (BLOCK_SIZE - 1));
+    size_t rest = (file.size & (BLOCK_SIZE - 1));
     if (rest) {
         if (nextFat == FAT_EOF)
             throw std::runtime_error("some shite went wrong");
@@ -622,27 +616,41 @@ int FS::append(std::string filepath1, std::string filepath2) {
     parsePath(filepath2, path2);
 
     dir_entry src;
+    dir_entry srcDir = this->workingDir;
+
     dir_entry dest;
+    dir_entry destDir = this->workingDir;
+    int destBlockIndex;
+    int16_t destFatIndex;
 
-    this->__cdToFile(src, path1);
+    // find dirs
+    if(path1.size() > 1 && !this->__cd(srcDir, std::vector<std::string>(path1.begin(), path1.end() - 1))) return -1;
+    if(path2.size() > 1 && !this->__cd(destDir, std::vector<std::string>(path2.begin(), path2.end() - 1))) return -1;
 
-    // need to track daddy dir for path2 file aswell to update file size in
-    // dir_entry
-    this->__cdToFile(dest, path2);
+    // find files
+    this->findDirEntry(srcDir, path1.back(), src);
+    this->findDirEntry(destDir, path2.back(), dest, destFatIndex, destBlockIndex);
 
-    int16_t offset = dest.size & (BLOCK_SIZE - 1);
+    // check that types are actually files
+    if(src.type != TYPE_FILE || dest.type != TYPE_FILE) return -3;
 
-    int16_t extraFatSpace = this->reserve((int)src.size - BLOCK_SIZE + offset);
-    if (extraFatSpace == -1) return -1;
-
+    // go to last block in dest
     int16_t destFat = dest.first_blk;
     while (this->fat[destFat] != FAT_EOF) destFat = this->fat[destFat];
 
+    // place to start adding new data in last block of dest
+    int16_t offset = (dest.size & (BLOCK_SIZE - 1));
+
+    // reserve neccesary space
+    int16_t extraFatSpace = this->reserve((int)src.size - BLOCK_SIZE + offset);
+    if (extraFatSpace == -1) return -4;
     this->fat[destFat] = extraFatSpace;
+
 
     int16_t srcFat = src.first_blk;
     uint8_t srcData[BLOCK_SIZE]{0};
     uint8_t destData[BLOCK_SIZE]{0};
+
     this->disk.read(destFat, destData);
     while (srcFat != FAT_EOF) {
         this->disk.read(srcFat, srcData);
@@ -652,18 +660,29 @@ int FS::append(std::string filepath1, std::string filepath2) {
             destData[i + offset] = srcData[i];
         }
         this->disk.write(destFat, destData);
+
         // clean buffer
         for (int i = 0; i < BLOCK_SIZE; i++) destData[i] = 0;
+
+        // iterate to next destFat
         destFat = this->fat[destFat];
-        if (destFat == FAT_EOF) return 0;
 
         // copy until srcblock is empty
         for (int i = 0; i < offset; i++) {
             destData[i] = srcData[i - offset + BLOCK_SIZE];
         }
+        srcFat = this->fat[srcFat];
     }
-    this->disk.write(destFat, destData);
+    if (destFat != FAT_EOF)
+        this->disk.write(destFat, destData);
+
     this->disk.write(FAT_BLOCK, (uint8_t*)this->fat);
+
+    // Update dir_entry in directory
+    std::array<dir_entry, 64> dirBlock;
+    this->disk.read(destFatIndex, (uint8_t*)dirBlock.data());
+    dirBlock[destBlockIndex].size += src.size;
+    this->disk.write(destFatIndex, (uint8_t*)dirBlock.data());
 
     return 0;
 }
