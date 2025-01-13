@@ -66,9 +66,6 @@ class FS {
 
     void free(int16_t fatStart);
 
-    bool __writeData(int16_t startFat, std::string data, int16_t ofset = 0);
-
-
     /// @brief return the Fat index to an empty file slot
     /// @return index or -1 if no empty slots
     int getEmptyFat() const;
