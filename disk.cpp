@@ -39,7 +39,7 @@ int Disk::write(unsigned block_no, uint8_t *blk) {
     if (DEBUG) {
         std::cout << "writing:\n";
         for (int i = 0; i < BLOCK_SIZE; i++) std::cout << ((char*)blk)[i];
-        std::cout << "\n";        
+        std::cout << "\n";
     }
 
     unsigned offset = block_no * BLOCK_SIZE;
