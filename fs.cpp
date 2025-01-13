@@ -10,9 +10,17 @@ bool parsePath(std::string sPath, std::vector<std::string>& path) {
     path.clear();
     if (sPath.size() == 0) return false;
 
+    size_t index;
+    if (sPath[0] == '/') {
+        path.emplace_back("/");
+        index = 1;
+    } else {
+        index = 0;
+    }
+
     std::string fileName = "";
 
-    for (size_t index = 0; index < sPath.size(); index++) {
+    for (; index < sPath.size(); index++) {
         if (sPath[index] == '/') {
             path.emplace_back(fileName);
             fileName = "";
@@ -67,6 +75,10 @@ inline bool validEntry(const dir_entry& dir) { return dir.file_name[0] != 0; }
 
 bool FS::findDirEntry(dir_entry dir, std::string fileName, dir_entry& result,
                       int16_t& fatIndex, int& blockIndex) {
+    if (fileName == "/") {
+        result = this->workingPath[0];
+        return true;
+    }
     fatIndex = dir.first_blk;
     std::array<dir_entry, 64> dirBlock{};
     if (!(dir.access_rights & READ)) return false;
@@ -126,7 +138,7 @@ bool FS::__cdToFile(dir_entry& workingDir, const std::vector<std::string>& path,
                 };
                 file.copy(newDir.file_name, 56);
                 if (!this->__create(workingDir, newDir, "")) return false;
-                if (!this->findDirEntry(workingDir, file, workingDir)){
+                if (!this->findDirEntry(workingDir, file, workingDir)) {
                     throw std::runtime_error(
                         "Thingy that should not possibly have failed failed, "
                         "How???? Line:" +
@@ -142,6 +154,7 @@ bool FS::__cdToFile(dir_entry& workingDir, const std::vector<std::string>& path,
 
 bool FS::addDirEntry(dir_entry& dir, dir_entry newEntry) {
     dir_entry temp;
+    if (std::string("").compare(newEntry.file_name) == 0) return false;
     if (this->findDirEntry(dir, std::string(newEntry.file_name), temp)) {
         return false;
     }
@@ -244,7 +257,10 @@ bool FS::__create(dir_entry dir, dir_entry& metadata, const std::string& data) {
     metadata.first_blk = startfat;
     metadata.size = data.size();
 
-    if (!this->addDirEntry(dir, metadata)) return false;
+    if (!this->addDirEntry(dir, metadata)) {
+        this->free(startfat);
+        return false;
+    }
 
     // write the data to the new file
     std::string extra;
@@ -263,7 +279,7 @@ bool FS::__create(dir_entry dir, dir_entry& metadata, const std::string& data) {
     int16_t fatIndex = metadata.first_blk;
     while (fatIndex != FAT_EOF) {
         char buffer[4096]{0};
-        data.copy(buffer, BLOCK_SIZE, pos);
+        (extra + data).copy(buffer, BLOCK_SIZE, pos);
         this->disk.write(fatIndex, (uint8_t*)buffer);
         pos += BLOCK_SIZE;
         fatIndex = this->fat[fatIndex];
@@ -288,6 +304,7 @@ FS::FS() {
         .type = TYPE_DIR,
         .access_rights = READ | WRITE,
     };
+    this->workingPath.emplace_back(this->workingDir);
 }
 
 FS::~FS() {}
@@ -319,6 +336,8 @@ int FS::format() {
     this->disk.write(ROOT_BLOCK, (uint8_t*)directories);
     this->disk.write(FAT_BLOCK, (uint8_t*)(this->fat));
     this->workingDir = directories[0];
+    this->workingPath.clear();
+    this->workingPath.emplace_back(this->workingDir);
     return 0;
 }
 
@@ -688,11 +707,16 @@ int FS::cd(std::string dirpath) {
     parsePath(dirpath, path);
     std::vector<dir_entry> newWorkingPath(this->workingPath);
     for (std::string dirName : path) {
-        if (!this->findDirEntry(newWorkingDir, dirName, newWorkingDir))
+        if (dirName == "/") {
+            newWorkingPath.clear();
+            newWorkingDir = this->workingPath[0];
+            newWorkingPath.emplace_back(newWorkingDir);
+        } else if (!this->findDirEntry(newWorkingDir, dirName, newWorkingDir)) {
             return -1;
-        if (newWorkingDir.type != TYPE_DIR) return -1;
-        if (dirName == "..") {
-            if (newWorkingPath.size() > 0) {
+        } else if (newWorkingDir.type != TYPE_DIR) {
+            return -1;
+        } else if (dirName == "..") {
+            if (newWorkingPath.size() > 1) {
                 newWorkingPath.pop_back();
             }
         } else if (dirName != ".") {
@@ -715,9 +739,11 @@ int FS::cd(std::string dirpath) {
 // directory, including the currect directory name
 int FS::pwd() {
     std::string path = "/";
-
-    for (dir_entry dir : this->workingPath) {
-        path += std::string(dir.file_name) + "/";
+    for (size_t i = 1; i < this->workingPath.size() - 1; i++) {
+        path += std::string(workingPath[i].file_name) + "/";
+    }
+    if (workingPath.size() > 1) {
+        path += std::string(workingPath.back().file_name);
     }
     std::cout << path << "\n";
     return 0;
