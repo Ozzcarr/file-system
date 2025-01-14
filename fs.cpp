@@ -135,7 +135,7 @@ bool FS::removeDirEntry(dir_entry& dir, std::string fileName) {
         this->fat[fatIndex] = FAT_EOF;
     }
 
-    this->disk.write(1, (uint8_t*)this->fat);
+    this->disk.write(FAT_BLOCK, (uint8_t*)this->fat);
     return true;
 }
 
@@ -438,7 +438,7 @@ int FS::mv(std::string sourcepath, std::string destpath) {
     }
 
     // update FAT
-    this->disk.write(1, (uint8_t*)this->fat);
+    this->disk.write(FAT_BLOCK, (uint8_t*)this->fat);
     return 0;
 }
 
@@ -463,7 +463,7 @@ int FS::rm(std::string filepath) {
     this->free(file.first_blk);
 
     // update fat
-    this->disk.write(1, (uint8_t*)this->fat);
+    this->disk.write(FAT_BLOCK, (uint8_t*)this->fat);
     return 0;
 }
 
