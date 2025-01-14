@@ -6,40 +6,10 @@
 #include <iostream>
 #include <vector>
 
-bool parsePath(std::string sPath, std::vector<std::string>& path) {
-    path.clear();
-    if (sPath.size() == 0) return false;
-
-    size_t index;
-    if (sPath[0] == '/') {
-        path.emplace_back("/");
-        index = 1;
-    } else {
-        index = 0;
-    }
-
-    std::string fileName = "";
-
-    for (; index < sPath.size(); index++) {
-        if (sPath[index] == '/') {
-            path.emplace_back(fileName);
-            fileName = "";
-        } else if (sPath[index] == '\n') {
-            if (fileName.size() > 0) path.emplace_back(fileName);
-            return 0;
-        } else
-            fileName += sPath[index];
-    }
-    if (fileName.size() > 0) path.emplace_back(fileName);
-    return true;
-}
-
 int16_t FS::reserve(size_t size) {
     int neededNodes = (size + (BLOCK_SIZE - 1)) / BLOCK_SIZE;
-    std::vector<int> fatNodes;
     int16_t firstNode = this->getEmptyFat();
     if (firstNode == -1) return false;
-    fatNodes.emplace_back(firstNode);
     this->fat[firstNode] = FAT_EOF;
 
     int16_t prevNode = firstNode;
@@ -49,12 +19,9 @@ int16_t FS::reserve(size_t size) {
             this->fat[prevNode] = newNode;
             this->fat[newNode] = FAT_EOF;
             prevNode = newNode;
-            fatNodes.emplace_back(newNode);
 
         } else {
-            for (int fatIndex : fatNodes) {
-                this->fat[fatIndex] = FAT_FREE;
-            }
+            free(firstNode);
             return -1;
         }
     }
@@ -73,89 +40,11 @@ void FS::free(int16_t fatStart) {
 
 inline bool validEntry(const dir_entry& dir) { return dir.file_name[0] != 0; }
 
-bool FS::findDirEntry(dir_entry dir, std::string fileName, dir_entry& result,
-                      int16_t& fatIndex, int& blockIndex) {
-    if (fileName == "/") {
-        result = this->workingPath[0];
-        return true;
-    }
-    fatIndex = dir.first_blk;
-    std::array<dir_entry, 64> dirBlock{};
-    if (!(dir.access_rights & READ)) return false;
-
-    while (fatIndex != FAT_EOF) {
-        this->disk.read(fatIndex, (uint8_t*)dirBlock.data());
-
-        for (blockIndex = 0; blockIndex < 64; blockIndex++) {
-            if (!validEntry(dirBlock[blockIndex])) return false;
-            if (fileName.compare(0, 56, dirBlock[blockIndex].file_name) == 0) {
-                result = dirBlock[blockIndex];
-                if (!(result.access_rights & READ)) return false;
-                return true;
-            }
-        }
-        fatIndex = this->fat[fatIndex];
-    }
-
-    return false;
-}
-
-bool FS::findDirEntry(dir_entry dir, std::string fileName, dir_entry& result) {
-    int16_t fatIndex;
-    int blockIndex;
-    return findDirEntry(dir, fileName, result, fatIndex, blockIndex);
-}
-
-bool FS::__cd(dir_entry& workingDir, const std::string& path, bool createDirs) {
-    std::vector<std::string> pathv;
-    parsePath(path, pathv);
-    return this->__cd(workingDir, pathv, createDirs);
-}
-
-bool FS::__cd(dir_entry& workingDir, const std::vector<std::string>& path,
-              bool createDirs) {
-    if (!this->__cdToFile(workingDir, path, createDirs)) return false;
-    if (workingDir.type == TYPE_FILE) return false;
-    return true;
-}
-
-bool FS::__cdToFile(dir_entry& workingDir, const std::string& path,
-                    bool createDirs) {
-    std::vector<std::string> pathv;
-    parsePath(path, pathv);
-    return this->__cdToFile(workingDir, pathv, createDirs);
-}
-
-bool FS::__cdToFile(dir_entry& workingDir, const std::vector<std::string>& path,
-                    bool createDirs) {
-    for (std::string file : path) {
-        if (!workingDir.type == TYPE_DIR) return false;
-        if (!this->findDirEntry(workingDir, file, workingDir)) {
-            if (createDirs) {
-                dir_entry newDir{
-                    .type = TYPE_DIR,
-                    .access_rights = WRITE | READ,
-                };
-                file.copy(newDir.file_name, 56);
-                if (!this->__create(workingDir, newDir, "")) return false;
-                if (!this->findDirEntry(workingDir, file, workingDir)) {
-                    throw std::runtime_error(
-                        "Thingy that should not possibly have failed failed, "
-                        "How???? Line:" +
-                        std::to_string(__LINE__) + " " + "File: " + __FILE__);
-                }
-            } else {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-bool FS::addDirEntry(dir_entry& dir, dir_entry newEntry) {
+bool FS::addDirEntry(const dir_entry& dir, dir_entry newEntry) {
     dir_entry temp;
     if (std::string("").compare(newEntry.file_name) == 0) return false;
-    if (this->findDirEntry(dir, std::string(newEntry.file_name), temp)) {
+    if (this->workingPath.searchDir(dir, std::string(newEntry.file_name),
+                                    temp)) {
         return false;
     }
 
@@ -200,13 +89,15 @@ bool FS::addDirEntry(dir_entry& dir, dir_entry newEntry) {
     return true;
 }
 
-bool FS::removeDirEntry(dir_entry& dir, std::string fileName) {  // Onödig skit
+bool FS::removeDirEntry(dir_entry& dir, std::string fileName) {
     int16_t removeBlockIndex;
     int removeDirEntryIndex;
     dir_entry entryToRemove;
-    if (!this->findDirEntry(dir, std::string(fileName), entryToRemove,
-                            removeBlockIndex, removeDirEntryIndex))
+
+    if (!this->workingPath.searchDir(dir, fileName, entryToRemove,
+                                     removeBlockIndex, removeDirEntryIndex)) {
         return false;
+    }
 
     int16_t fatIndex = dir.first_blk;
     while (this->fat[fatIndex] != FAT_EOF) {
@@ -248,7 +139,8 @@ bool FS::removeDirEntry(dir_entry& dir, std::string fileName) {  // Onödig skit
     return true;
 }
 
-bool FS::__create(dir_entry dir, dir_entry& metadata, const std::string& data) {
+bool FS::__create(const dir_entry& dir, dir_entry& metadata,
+                  const std::string& data) {
     // reserve space that the new file needs
     int16_t startfat = this->reserve(data.size());
     if (startfat == -1) return false;
@@ -295,16 +187,8 @@ int FS::getEmptyFat() const {
     return -1;
 }
 
-FS::FS() {
+FS::FS() : workingPath(&this->disk, this->fat) {
     this->disk.read(FAT_BLOCK, (uint8_t*)this->fat);
-    this->workingDir = {
-        .file_name = ".",
-        .size = 0,
-        .first_blk = 0,
-        .type = TYPE_DIR,
-        .access_rights = READ | WRITE,
-    };
-    this->workingPath.emplace_back(this->workingDir);
 }
 
 FS::~FS() {}
@@ -335,25 +219,19 @@ int FS::format() {
 
     this->disk.write(ROOT_BLOCK, (uint8_t*)directories);
     this->disk.write(FAT_BLOCK, (uint8_t*)(this->fat));
-    this->workingDir = directories[0];
-    this->workingPath.clear();
-    this->workingPath.emplace_back(this->workingDir);
+    this->workingPath = Path(&this->disk, this->fat);
     return 0;
 }
 
 // create <filepath> creates a new file on the disk, the data content is
 // written on the following rows (ended with an empty row)
 int FS::create(std::string filepath) {
-    std::vector<std::string> path;
-    parsePath(filepath, path);
-    dir_entry currentDir = this->workingDir;
+    dir_entry currentDir;
+    std::string fileName;
 
-    if (path.size() == 0) return -1;
-
-    if (path.size() > 1 &&
-        !this->__cd(currentDir,
-                    std::vector<std::string>(path.begin(), path.end() - 1)))
+    if (!this->workingPath.findUpToLast(filepath, currentDir, fileName))
         return -1;
+    if (currentDir.type != TYPE_DIR) return -1;
 
     if (!(currentDir.access_rights & WRITE)) return -1;
 
@@ -362,9 +240,9 @@ int FS::create(std::string filepath) {
         .access_rights = READ | WRITE,
     };
 
-    if (path.back().size() > 55) return -1;
+    if (fileName.size() > 55) return -1;
 
-    path.back().copy(newFile.file_name, 56);
+    fileName.copy(newFile.file_name, 56);
 
     std::string data, line;
 
@@ -379,10 +257,10 @@ int FS::create(std::string filepath) {
 
 // cat <filepath> reads the content of a file and prints it on the screen
 int FS::cat(std::string filepath) {
-    dir_entry file = workingDir;
-    if (!this->__cdToFile(file, filepath, false)) return -1;
-
+    dir_entry file;
+    if (!this->workingPath.find(filepath, file)) return -1;
     if (file.type != TYPE_FILE) return -1;
+    if (!(file.access_rights & READ)) return -1;
 
     int16_t nextFat = file.first_blk;
     char dirBlock[BLOCK_SIZE];
@@ -420,7 +298,9 @@ int FS::cat(std::string filepath) {
 
 // ls lists the content in the current directory (files and sub-directories)
 int FS::ls() {
-    int16_t nextFat = this->workingDir.first_blk;
+    if (!(this->workingPath.workingDir().access_rights & READ)) return -1;
+
+    int16_t nextFat = this->workingPath.workingDir().first_blk;
     std::cout << "name\t type\t accessrights\t size\n";
 
     while (nextFat != FAT_EOF) {
@@ -449,44 +329,41 @@ int FS::ls() {
 // cp <sourcepath> <destpath> makes an exact copy of the file
 // <sourcepath> to a new file <destpath>
 int FS::cp(std::string sourcepath, std::string destpath) {
-    dir_entry src = this->workingDir;
-    dir_entry dest = this->workingDir;
+    dir_entry src;
+    dir_entry dest;
 
-    std::vector<std::string> path;
-    parsePath(sourcepath, path);
-    if (path.size() == 0) return -1;
-
-    // find src dir
-    if (path.size() > 1 && !this->__cd(src, std::vector<std::string>(
-                                                path.begin(), path.end() - 1)))
-        return -1;
     // find src
-    if (!this->findDirEntry(src, path.back(), src)) return -1;
+    if (!this->workingPath.find(sourcepath, src)) return -1;
+    if (src.type != TYPE_FILE) return -2;
+    if (!(src.access_rights & READ)) return -2;
 
-    path.empty();
-    parsePath(destpath, path);
-
-    if (path.size() > 1 && !this->__cd(dest, std::vector<std::string>(
-                                                 path.begin(), path.end() - 1)))
-        return -1;
+    // find dest dir
+    std::string fileName;
+    if (!this->workingPath.findUpToLast(destpath, dest, fileName)) return -3;
+    if (dest.type != TYPE_DIR) return -4;
 
     dir_entry filecpy = src;
 
-    if (!this->findDirEntry(dest, path.back(), dest)) {
+    // check if last is a dir or a new filename, if neither ERROR
+    if (!this->workingPath.searchDir(dest, fileName, dest)) {
         for (int i = 0; i < 56; i++) filecpy.file_name[i] = 0;
-        path.back().copy(filecpy.file_name, 56);
+        fileName.copy(filecpy.file_name, 56);
     } else {
-        if (dest.type == TYPE_FILE) return -1;
+        if (dest.type != TYPE_DIR) return -5;
     }
 
-    if (!(dest.access_rights & WRITE)) return -1;
+    // Make sure we are allowed to write
+    if (!(dest.access_rights & WRITE)) return -6;
 
+    // reserve needed space
     int16_t newFats = this->reserve(src.size);
     if (newFats == -1) return -1;
     filecpy.first_blk = newFats;
 
-    if (!this->addDirEntry(dest, filecpy)) return -1;
+    // add entry
+    if (!this->addDirEntry(dest, filecpy)) return -7;
 
+    // copy data
     int16_t nextSrcFat = src.first_blk;
     int16_t nextTargetFat = filecpy.first_blk;
     while (nextSrcFat != FAT_EOF) {
@@ -496,7 +373,9 @@ int FS::cp(std::string sourcepath, std::string destpath) {
         nextSrcFat = this->fat[nextSrcFat];
         nextTargetFat = this->fat[nextTargetFat];
     }
-    this->disk.write(1, (uint8_t*)this->fat);
+
+    // update FAT block
+    this->disk.write(FAT_BLOCK, (uint8_t*)this->fat);
 
     return 0;
 }
@@ -505,76 +384,85 @@ int FS::cp(std::string sourcepath, std::string destpath) {
 // <destpath>, or moves the file <sourcepath> to the directory <destpath> (if
 // dest is a directory)
 int FS::mv(std::string sourcepath, std::string destpath) {
-    dir_entry dir = this->workingDir;
-    std::vector<std::string> path;
-    parsePath(sourcepath, path);
-    dir_entry file;
+    dir_entry srcDir;
+    dir_entry srcFile;
 
     // find src dir
-    if (path.size() > 1 && !this->__cd(dir, std::vector<std::string>(
-                                                path.begin(), path.end() - 1)))
+    std::string fileName;
+    if (!this->workingPath.findUpToLast(sourcepath, srcDir, fileName))
         return -1;
+
     // find src
-    if (!this->findDirEntry(dir, path.back(), file)) return -2;
+    if (!this->workingPath.searchDir(srcDir, fileName, srcFile)) return -2;
 
-    if (!(dir.access_rights & WRITE)) return -1;
+    // check that we are allowed to read and write
+    if (!(srcDir.access_rights & WRITE)) return -1;
+    if (!(srcDir.access_rights & READ)) return -1;
 
-    dir_entry fileCopy = file;
-    path.clear();
-    parsePath(destpath, path);
-    dir_entry targetDir = this->workingDir;
-    if (path.size() > 1 &&
-        !this->__cd(targetDir,
-                    std::vector<std::string>(path.begin(), path.end() - 1)))
+    // find possible target dir
+    dir_entry fileCopy = srcFile;
+    dir_entry targetDir;
+    if (!this->workingPath.findUpToLast(destpath, targetDir, fileName))
         return -3;
 
-    if (!(targetDir.access_rights & WRITE)) return -1;
-
+    // check if last entry is a valid dir, if it is that is the target dir, if
+    // it is a file we cannot move here, if there exists no entry with the name
+    // fileName, the name of our moved entry is changed to fileName
     dir_entry temp;
-    if (this->findDirEntry(targetDir, path.back(), temp)) {
+    if (this->workingPath.searchDir(targetDir, fileName, temp)) {
         if (temp.type == TYPE_DIR) {
             targetDir = temp;
         } else {
             return -4;
         }
     } else {
-        path.back().copy(fileCopy.file_name, 56);
+        fileName.copy(fileCopy.file_name, 56);
     }
 
-    std::array<dir_entry, 64> dirBlock{};
-    this->disk.read(fileCopy.first_blk, (uint8_t*)dirBlock.data());
-    dirBlock[1] = targetDir;
-    std::string("..").copy(dirBlock[1].file_name, 56);
-    this->disk.write(fileCopy.first_blk, (uint8_t*)dirBlock.data());
+    // check that we are allowed to write in target dir
+    if (!(targetDir.access_rights & WRITE)) return -1;
 
+    // move the directory entry
     if (!this->addDirEntry(targetDir, fileCopy)) return -5;
-    if (dir.first_blk == targetDir.first_blk) dir.size += 64;
-    if (!this->removeDirEntry(dir, file.file_name))
+    if (srcDir.first_blk == targetDir.first_blk) srcDir.size += 64;
+    if (!this->removeDirEntry(srcDir, srcFile.file_name))
         throw std::runtime_error("how??");
 
+    // update ".." file in directory
+    if (fileCopy.type == TYPE_DIR) {
+        std::array<dir_entry, 64> dirBlock{};
+        this->disk.read(fileCopy.first_blk, (uint8_t*)dirBlock.data());
+        dirBlock[1] = targetDir;
+        std::string("..").copy(dirBlock[1].file_name, 56);
+        this->disk.write(fileCopy.first_blk, (uint8_t*)dirBlock.data());
+    }
+
+    // update FAT
     this->disk.write(1, (uint8_t*)this->fat);
     return 0;
 }
 
 // rm <filepath> removes / deletes the file <filepath>
 int FS::rm(std::string filepath) {
-    dir_entry dir = this->workingDir;
-    std::vector<std::string> path;
-    parsePath(filepath, path);
+    dir_entry dir;
     dir_entry file;
 
     // find src dir
-    if (path.size() > 1 && !this->__cd(dir, std::vector<std::string>(
-                                                path.begin(), path.end() - 1)))
-        return -1;
+    std::string fileName;
+    if (!this->workingPath.findUpToLast(filepath, dir, fileName)) return -1;
+
     // find src
-    if (!this->findDirEntry(dir, path.back(), file)) return -1;
+    if (!this->workingPath.searchDir(dir, fileName, file)) return -1;
 
+    // Make sure we have write rights
     if (!(dir.access_rights & WRITE)) return -1;
+    if (!(dir.access_rights & READ)) return -1;
 
+    // remove the entry and free the fat
     if (!this->removeDirEntry(dir, file.file_name)) return -1;
     this->free(file.first_blk);
 
+    // update fat
     this->disk.write(1, (uint8_t*)this->fat);
     return 0;
 }
@@ -582,41 +470,32 @@ int FS::rm(std::string filepath) {
 // append <filepath1> <filepath2> appends the contents of file <filepath1> to
 // the end of file <filepath2>. The file <filepath1> is unchanged.
 int FS::append(std::string filepath1, std::string filepath2) {
-    // Work very much not done
-    std::vector<std::string> path1;
-    std::vector<std::string> path2;
-    parsePath(filepath1, path1);
-    parsePath(filepath2, path2);
-
+    // find src
     dir_entry src;
-    dir_entry srcDir = this->workingDir;
+    if (!this->workingPath.find(filepath1, src)) return -1;
+    if (src.type != TYPE_FILE) return -2;
 
+    // Destination Data
     dir_entry dest;
-    dir_entry destDir = this->workingDir;
+    dir_entry destDir;
     int destBlockIndex;
     int16_t destFatIndex;
+    std::string targetFileName;
 
-    // find dirs
-    if (path1.size() > 1 &&
-        !this->__cd(srcDir,
-                    std::vector<std::string>(path1.begin(), path1.end() - 1)))
-        return -1;
-    if (path2.size() > 1 &&
-        !this->__cd(destDir,
-                    std::vector<std::string>(path2.begin(), path2.end() - 1)))
-        return -1;
+    // find dest Dir
+    if (!this->workingPath.findUpToLast(filepath2, destDir, targetFileName))
+        return -3;
 
-    // find files
-    this->findDirEntry(srcDir, path1.back(), src);
-    this->findDirEntry(destDir, path2.back(), dest, destFatIndex,
-                       destBlockIndex);
+    // find dest
+    if (!this->workingPath.searchDir(destDir, targetFileName, dest,
+                                     destFatIndex, destBlockIndex))
+        return -4;
+
+    if (dest.type != TYPE_FILE) return -5;
 
     // check access rights
-    if (!(src.access_rights & READ)) return -1;
-    if (!(dest.access_rights & WRITE)) return -1;
-
-    // check that types are actually files
-    if (src.type != TYPE_FILE || dest.type != TYPE_FILE) return -3;
+    if (!(src.access_rights & READ)) return -6;
+    if (!(dest.access_rights & WRITE)) return -7;
 
     // go to last block in dest
     int16_t destFat = dest.first_blk;
@@ -629,7 +508,7 @@ int FS::append(std::string filepath1, std::string filepath2) {
     if (dest.size == 0 && src.size > BLOCK_SIZE) {
         int neededSpace = src.size - BLOCK_SIZE;
         int16_t extraFatSpace = this->reserve(neededSpace);
-        if (extraFatSpace == -1) return -4;
+        if (extraFatSpace == -1) return -8;
         this->fat[destFat] = extraFatSpace;
     }
     // (BLOCK_SIZE - ((dest.size - 1) & (BLOCK_SIZE - 1)) - 1) *This is how much
@@ -640,7 +519,7 @@ int FS::append(std::string filepath1, std::string filepath2) {
             src.size - (BLOCK_SIZE - ((dest.size - 1) & (BLOCK_SIZE - 1)) - 1);
         if (neededSpace < 0) throw std::runtime_error("sometink bad happend");
         int16_t extraFatSpace = this->reserve(neededSpace);
-        if (extraFatSpace == -1) return -4;
+        if (extraFatSpace == -1) return -9;
         this->fat[destFat] = extraFatSpace;
     }
 
@@ -691,96 +570,256 @@ int FS::append(std::string filepath1, std::string filepath2) {
 // mkdir <dirpath> creates a new sub-directory with the name <dirpath>
 // in the current directory
 int FS::mkdir(std::string dirpath) {
-    dir_entry dir2 = this->workingDir;
-    if (this->__cd(dir2, dirpath)) return -1;
-    if (!(dir2.access_rights & WRITE)) return -1;
-    dir2 = this->workingDir;
-    if (!this->__cd(dir2, dirpath, true)) return -1;
+    // Parse path
+    std::vector<std::string> path;
+    if (!Path::parsePath(dirpath, path)) return -1;
+
+    // find the last valid dir_entry
+    dir_entry currentDir = this->workingPath.workingDir();
+    auto it = path.begin();
+    for (; it < path.end(); it++) {
+        if (!(currentDir.access_rights & READ)) return -1;
+        if (!this->workingPath.searchDir(currentDir, *it, currentDir))
+            break;
+    }
+
+    // if the last valid direntry is a file or we have reached the end of the
+    // path we cannot create any directories
+    if (it == path.end() || currentDir.type == TYPE_FILE ||
+        !(currentDir.access_rights & WRITE))
+        return -1;
+
+    // create directories from rest of path
+    for (; it < path.end(); it++) {
+        dir_entry newDir{
+            .type = TYPE_DIR,
+            .access_rights = READ | WRITE,
+        };
+        it->copy(newDir.file_name, 56);
+        if (!this->__create(currentDir, newDir, "")) return -1;
+        currentDir = newDir;
+    }
     return 0;
 }
 
 // cd <dirpath> changes the current (working) directory to the directory named
 // <dirpath>
 int FS::cd(std::string dirpath) {
-    dir_entry newWorkingDir = this->workingDir;
-    std::vector<std::string> path;
-    parsePath(dirpath, path);
-    std::vector<dir_entry> newWorkingPath(this->workingPath);
-    for (std::string dirName : path) {
-        if (dirName == "/") {
-            newWorkingPath.clear();
-            newWorkingDir = this->workingPath[0];
-            newWorkingPath.emplace_back(newWorkingDir);
-        } else if (!this->findDirEntry(newWorkingDir, dirName, newWorkingDir)) {
-            return -1;
-        } else if (newWorkingDir.type != TYPE_DIR) {
-            return -1;
-        } else if (dirName == "..") {
-            if (newWorkingPath.size() > 1) {
-                newWorkingPath.pop_back();
-            }
-        } else if (dirName != ".") {
-            newWorkingPath.emplace_back(newWorkingDir);
-        }
-    }
-
-    std::array<dir_entry, 64> dirBlock{};
-    this->disk.read(newWorkingDir.first_blk, (uint8_t*)dirBlock.data());
-
-    if (dirBlock[0].first_blk != newWorkingDir.first_blk)
-        throw std::runtime_error("very bad");
-
-    this->workingDir = dirBlock[0];
-    this->workingPath = newWorkingPath;
+    if (!this->workingPath.cd(dirpath)) return -1;
     return 0;
 }
 
 // pwd prints the full path, i.e., from the root directory, to the current
 // directory, including the currect directory name
 int FS::pwd() {
-    std::string path = "/";
-    for (size_t i = 1; i < this->workingPath.size() - 1; i++) {
-        path += std::string(workingPath[i].file_name) + "/";
-    }
-    if (workingPath.size() > 1) {
-        path += std::string(workingPath.back().file_name);
-    }
-    std::cout << path << "\n";
+    std::cout << this->workingPath.pwd() + "\n";
     return 0;
 }
 
 // chmod <accessrights> <filepath> changes the access rights for the
 // file <filepath> to <accessrights>.
 int FS::chmod(std::string accessrights, std::string filepath) {
+    // Parse access rights
     if (accessrights.size() > 1) return -1;
     if (!std::isdigit(accessrights[0])) return -1;
-    uint8_t accessRightBin =
-        std::stoi(&accessrights[0]) & (READ | WRITE | EXECUTE);
+    uint8_t accessRightBin = std::stoi(accessrights) & (READ | WRITE | EXECUTE);
 
-    std::vector<std::string> path;
-    parsePath(filepath, path);
+    // Find directory that target lies in
+    dir_entry dir;
+    std::string fileName;
+    if (!this->workingPath.findUpToLast(filepath, dir, fileName)) return -1;
 
-    dir_entry dir = this->workingDir;
-    if (path.size() > 1) {
-        this->__cd(dir, std::vector<std::string>(path.begin(), path.end() - 1));
-    }
-
-    dir_entry target_dir;
+    // find target
+    dir_entry target;
     int16_t fatIndex;
     int blockIndex;
-    this->findDirEntry(dir, path.back(), target_dir, fatIndex, blockIndex);
+    if (!this->workingPath.searchDir(dir, fileName, target, fatIndex,
+                                     blockIndex))
+        return -1;
 
+    // update dir_entry in directory
     std::array<dir_entry, 64> dirBlock{};
     this->disk.read(fatIndex, (uint8_t*)dirBlock.data());
     dirBlock[blockIndex].access_rights = accessRightBin;
     this->disk.write(fatIndex, (uint8_t*)dirBlock.data());
 
-    this->disk.read(target_dir.first_blk, (uint8_t*)dirBlock.data());
-    dirBlock[0].access_rights = accessRightBin;
-    this->disk.write(target_dir.first_blk, (uint8_t*)dirBlock.data());
+    // update "." entry in directory
+    if (target.type == TYPE_DIR) {
+        this->disk.read(target.first_blk, (uint8_t*)dirBlock.data());
+        dirBlock[0].access_rights = accessRightBin;
+        this->disk.write(target.first_blk, (uint8_t*)dirBlock.data());
+    }
 
-    if (target_dir.first_blk == this->workingDir.first_blk)
-        this->workingDir.access_rights = accessRightBin;
+    this->workingPath.updatePathEntry(target, target);
 
     return 0;
+}
+
+FS::Path::Path(Disk* disk, int16_t* const fat) : disk(disk), fat(fat) {
+    // Add root dir
+    dir_entry root{
+        .first_blk = 0,
+        .type = TYPE_DIR,
+        .access_rights = READ | WRITE,
+    };
+    this->path.emplace_back(root);
+}
+
+bool FS::Path::find(const std::string& path, dir_entry& result) const {
+    std::vector<std::string> pathv;
+    if (!this->parsePath(path, pathv)) return false;
+    result = this->workingDir();
+
+    for (std::string file : pathv) {
+        if (!result.type == TYPE_DIR) return false;
+        if (!this->searchDir(result, file, result)) return false;
+    }
+    return true;
+}
+
+bool FS::Path::findUpToLast(const std::string& path, dir_entry& result,
+                            std::string& last) const {
+    std::vector<std::string> pathv;
+    if (!this->parsePath(path, pathv)) return false;
+    result = this->workingDir();
+
+    for (auto it = pathv.begin(); it < pathv.end() - 1; it++) {
+        if (!result.type == TYPE_DIR) return false;
+        if (!this->searchDir(result, *it, result)) return false;
+    }
+    last = pathv.back();
+    return true;
+}
+
+inline bool FS::Path::searchDir(const dir_entry& dir,
+                                const std::string& fileName,
+                                dir_entry& result) const {
+    int16_t fatIndex;
+    int blockIndex;
+    return this->searchDir(dir, fileName, result, fatIndex, blockIndex);
+}
+
+bool FS::Path::searchDir(const dir_entry& dir, const std::string& fileName,
+                         dir_entry& result, int16_t& fatIndex,
+                         int& blockIndex) const {
+    if (fileName == "/") {
+        result = this->path[0];
+        return true;
+    }
+    fatIndex = dir.first_blk;
+    std::array<dir_entry, 64> dirBlock{};
+    if (!(dir.access_rights & READ)) return false;
+
+    while (fatIndex != FAT_EOF) {
+        this->disk->read(fatIndex, (uint8_t*)dirBlock.data());
+
+        for (blockIndex = 0; blockIndex < 64; blockIndex++) {
+            if (!validEntry(dirBlock[blockIndex])) return false;
+
+            if (fileName.compare(0, 56, dirBlock[blockIndex].file_name) == 0) {
+                result = dirBlock[blockIndex];
+                return true;
+            }
+        }
+        fatIndex = this->fat[fatIndex];
+    }
+
+    return false;
+}
+
+bool FS::Path::cd(const std::string& path) {
+    // make copy of working path
+    std::vector<dir_entry> newPath(this->path);
+
+    // parse path
+    std::vector<std::string> pathv;
+    if (!this->parsePath(path, pathv)) return false;
+    dir_entry dir = this->workingDir();
+
+    // check for absolute path
+    auto it = pathv.begin();
+    if (*it == "/") {
+        newPath.clear();
+        dir = this->rootDir();
+        newPath.emplace_back(dir);
+        it++;
+    }
+
+    // iterate to end of path
+    for (; it < pathv.end(); it++) {
+        if (*it == "..") {
+            if (newPath.size() > 1) {
+                newPath.pop_back();
+                dir = newPath.back();
+            }
+        } else if (*it != ".") {
+            if (!(dir.access_rights & READ)) return false;
+            if (this->searchDir(dir, *it, dir)) {
+                if (dir.type != TYPE_DIR) return false;
+                newPath.emplace_back(dir);
+            } else {
+                return false;
+            }
+        }
+    }
+
+    // apply the newPath
+    this->path = newPath;
+    return true;
+}
+
+std::string FS::Path::pwd() const {
+    std::string path = "/";
+    auto it = this->path.begin() + 1;
+    for (; it < this->path.end() - 1; it++)
+        path += std::string(it->file_name) + "/";
+    if (this->path.size() > 1) path += std::string(it->file_name);
+    return path;
+}
+
+bool FS::Path::parsePath(const std::string& paths,
+                         std::vector<std::string>& pathv) {
+    pathv.clear();
+    if (paths.size() == 0) return false;
+
+    // check for absolute path
+    size_t index;
+    if (paths[0] == '/') {
+        pathv.emplace_back("/");
+        index = 1;
+    } else {
+        index = 0;
+    }
+
+    // parse every fileName into a vector
+    std::string fileName = "";
+    for (; index < paths.size(); index++) {
+        if (paths[index] == '/' || paths[index] == '\n') {
+            // check that fileName is valid
+            if (fileName.size() == 0 || fileName[0] == 0) return false;
+            // add fileName to vector
+            pathv.emplace_back(fileName);
+            if (paths[index] == '\n') return true;
+            fileName = "";
+        } else {
+            fileName += paths[index];
+        }
+    }
+    // if leftover check that fileName is valid and add
+    if (fileName.size() > 0) {
+        if (fileName == "." || fileName[0] == 0) return false;
+        pathv.emplace_back(fileName);
+    }
+
+    return true;
+}
+
+void FS::Path::updatePathEntry(const dir_entry& entry, dir_entry newData) {
+    // Find correct entry and change it
+    for (dir_entry& dir : this->path) {
+        if (dir.first_blk == entry.first_blk) {
+            dir = newData;
+            return;
+        }
+    }
 }

@@ -28,48 +28,6 @@ struct dir_entry {
 };
 
 class FS {
-   private:
-    Disk disk;
-    // size of a FAT entry is 2 bytes
-    int16_t fat[BLOCK_SIZE / 2];
-
-    dir_entry workingDir;
-
-    std::vector<dir_entry> workingPath;
-
-    void updateDirEntry(dir_entry old, dir_entry updated);
-
-    /// @brief
-    /// @param dirFirstBlock
-    /// @param fileName
-    /// @return
-    bool findDirEntry(dir_entry dir, std::string fileName, dir_entry& result, int16_t& fatIndex, int& blockIndex);
-
-    bool findDirEntry(dir_entry dir, std::string fileName, dir_entry& result);
-
-    bool __cd(dir_entry& workingDir, const std::string& path, bool createDirs = false);
-
-    bool __cd(dir_entry& workingDir, const std::vector<std::string>& path, bool createDirs = false);
-
-    bool __cdToFile(dir_entry& workingDir, const std::string& path, bool createDirs = false);
-
-    bool __cdToFile(dir_entry& workingDir, const std::vector<std::string>& path,
-              bool createDirs = false);
-
-    bool addDirEntry(dir_entry& dir, dir_entry newEntry);
-
-    bool removeDirEntry(dir_entry& dir, std::string fileName);
-
-    bool __create(dir_entry dir, dir_entry& filedata, const std::string& data);
-
-    int16_t reserve(size_t size);
-
-    void free(int16_t fatStart);
-
-    /// @brief return the Fat index to an empty file slot
-    /// @return index or -1 if no empty slots
-    int getEmptyFat() const;
-
    public:
     FS();
     ~FS();
@@ -109,6 +67,79 @@ class FS {
     // chmod <accessrights> <filepath> changes the access rights for the
     // file <filepath> to <accessrights>.
     int chmod(std::string accessrights, std::string filepath);
+
+
+   private:
+    Disk disk;
+    // size of a FAT entry is 2 bytes
+    int16_t fat[BLOCK_SIZE / 2];
+
+    class Path {
+        public:
+        Path(Disk* disk, int16_t* fat);
+        Path(const Path& other) = default;
+
+        Path& operator=(const Path& other) = default;
+
+        bool find(const std::string& path, dir_entry& result) const;
+        bool findUpToLast(const std::string& path, dir_entry& result, std::string& last) const;
+
+        inline bool searchDir(const dir_entry& dir, const std::string& fileName, dir_entry& result) const;
+        bool searchDir(const dir_entry& dir, const std::string& fileName, dir_entry& result, int16_t& fatIndex, int& blockIndex) const;
+
+        bool cd(const std::string& path);
+
+        inline const dir_entry& workingDir() const { return this->path.back(); }
+        inline const dir_entry& rootDir() const {return this->path.front(); }
+
+        std::string pwd() const;
+
+        static bool parsePath(const std::string& paths, std::vector<std::string>& pathv);
+
+        void updatePathEntry(const dir_entry& entry, dir_entry newData);
+
+        private:
+        Disk* disk;
+        int16_t* fat;
+        std::vector<dir_entry> path;
+    };
+
+    Path workingPath;
+
+    //dir_entry workingDir;
+
+    //std::vector<dir_entry> workingPath;
+
+    /// @brief
+    /// @param dirFirstBlock
+    /// @param fileName
+    /// @return
+    //bool findDirEntry(dir_entry dir, std::string fileName, dir_entry& result, int16_t& fatIndex, int& blockIndex);
+
+    //bool findDirEntry(dir_entry dir, std::string fileName, dir_entry& result);
+
+    //bool __cd(dir_entry& workingDir, const std::string& path, bool createDirs = false);
+
+    //bool __cd(dir_entry& workingDir, const std::vector<std::string>& path, bool createDirs = false);
+
+    //bool __cdToFile(dir_entry& workingDir, const std::string& path, bool createDirs = false);
+
+    //bool __cdToFile(dir_entry& workingDir, const std::vector<std::string>& path,
+    //          bool createDirs = false);
+
+    bool addDirEntry(const dir_entry& dir, dir_entry newEntry);
+
+    bool removeDirEntry(dir_entry& dir, std::string fileName);
+
+    bool __create(const dir_entry& dir, dir_entry& filedata, const std::string& data);
+
+    int16_t reserve(size_t size);
+
+    void free(int16_t fatStart);
+
+    /// @brief return the Fat index to an empty file slot
+    /// @return index or -1 if no empty slots
+    int getEmptyFat() const;
 };
 
 #endif  // __FS_H__
