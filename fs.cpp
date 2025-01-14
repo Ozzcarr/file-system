@@ -154,19 +154,15 @@ bool FS::__create(const dir_entry& dir, dir_entry& metadata,
         return false;
     }
 
-    // write the data to the new file
     std::string extra;
-    if (metadata.type == TYPE_DIR) {
-        for (int i = 0; i < 128; i++) extra += (char)0;
-        extra[0] = '.';
-        extra[64] = '.';
-        extra[65] = '.';
-        for (int i = 0; i < 64 - 56; i++) {
-            extra[i + 56] = ((char*)&metadata)[i + 56];
-            extra[64 + i + 56] = ((char*)&dir)[i + 56];
-        }
+    if( metadata.type == TYPE_DIR){
+        dir_entry dotanddotdot[] = {metadata, dir};
+        std::string extra = std::string((char*)dotanddotdot, 128);
+        std::string(".").copy(&extra[0], 2);
+        std::string("..").copy(&extra[64], 3);
     }
 
+    // write the data to the new file
     size_t pos = 0;
     int16_t fatIndex = metadata.first_blk;
     while (fatIndex != FAT_EOF) {
@@ -807,7 +803,7 @@ bool FS::Path::parsePath(const std::string& paths,
     }
     // if leftover check that fileName is valid and add
     if (fileName.size() > 0) {
-        if (fileName == "." || fileName[0] == 0) return false;
+        if (fileName[0] == 0) return false;
         pathv.emplace_back(fileName);
     }
 
