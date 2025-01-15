@@ -154,20 +154,20 @@ bool FS::__create(const dir_entry& dir, dir_entry& metadata,
         return false;
     }
 
-    std::string extra;
+    std::string totalData;
     if( metadata.type == TYPE_DIR){
         dir_entry dotanddotdot[] = {metadata, dir};
-        std::string extra = std::string((char*)dotanddotdot, 128);
-        std::string(".").copy(&extra[0], 2);
-        std::string("..").copy(&extra[64], 3);
+        totalData = std::string((char*)dotanddotdot, 128);
+        for (int i = 0; i < 2; i++) totalData[i] = "."[i];
+        for (int i = 0; i < 3; i++) totalData[64 + i] = ".."[i];
     }
-
+    totalData += data;
     // write the data to the new file
     size_t pos = 0;
     int16_t fatIndex = metadata.first_blk;
     while (fatIndex != FAT_EOF) {
         char buffer[4096]{0};
-        (extra + data).copy(buffer, BLOCK_SIZE, pos);
+        totalData.copy(buffer, BLOCK_SIZE, pos);
         this->disk.write(fatIndex, (uint8_t*)buffer);
         pos += BLOCK_SIZE;
         fatIndex = this->fat[fatIndex];
