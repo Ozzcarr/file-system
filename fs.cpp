@@ -93,8 +93,7 @@ int FS::cat(std::string filepath) {
 
     // Go through each full dirBlock
     for (int i = 0; i < (file.size / BLOCK_SIZE); i++) {
-        if (nextFat == FAT_EOF)
-            throw std::runtime_error(("1: Reached end of file before expected in cat()!"));
+        if (nextFat == FAT_EOF) throw std::runtime_error(("1: Reached end of file before expected in cat()!"));
 
         this->disk.read(nextFat, (uint8_t*)dirBlock);
         for (char c : dirBlock) {
@@ -180,7 +179,10 @@ int FS::cp(std::string sourcepath, std::string destpath) {
     filecpy.first_blk = newFats;
 
     // Add entry
-    if (!this->addDirEntry(dest, filecpy)) return -7;
+    if (!this->addDirEntry(dest, filecpy)) {
+        this->free(newFats);
+        return -7;
+    }
 
     // Copy data
     int16_t nextSrcFat = src.first_blk;
@@ -189,6 +191,7 @@ int FS::cp(std::string sourcepath, std::string destpath) {
         uint8_t block[BLOCK_SIZE]{0};
         this->disk.read(nextSrcFat, block);
         this->disk.write(nextTargetFat, block);
+
         nextSrcFat = this->fat[nextSrcFat];
         nextTargetFat = this->fat[nextTargetFat];
     }
@@ -199,7 +202,7 @@ int FS::cp(std::string sourcepath, std::string destpath) {
     return 0;
 }
 
-// Renames the file to the name or moves the file to the directory (if dest is a directory)
+// Renames the file or moves the file to the directory (if dest is a directory)
 int FS::mv(std::string sourcepath, std::string destpath) {
     dir_entry srcDir;
     dir_entry srcFile;
@@ -239,8 +242,8 @@ int FS::mv(std::string sourcepath, std::string destpath) {
 
     // Moves the directory entry
     if (!this->addDirEntry(targetDir, fileCopy)) return -5;
-    if (srcDir.first_blk == targetDir.first_blk) srcDir.size += 64;
-    if (!this->removeDirEntry(srcDir, srcFile.file_name)) throw std::runtime_error("how??");
+    if (!this->removeDirEntry(srcDir, srcFile.file_name))
+        throw std::runtime_error("removeDirEntry function failed to find dir_entry we have already found");
 
     // Updates the ".." file in directory
     if (fileCopy.type == TYPE_DIR) {
@@ -271,6 +274,13 @@ int FS::rm(std::string filepath) {
     // Make sure we have write rights
     if (!(dir.access_rights & WRITE)) return -1;
     if (!(dir.access_rights & READ)) return -1;
+
+    // If the entry is a directory, check that it is empty
+    if (file.type == TYPE_DIR) {
+        std::array<dir_entry, 64> dirblock;
+        this->disk.read(file.first_blk, (uint8_t*)dirblock.data());
+        if (isNotFreeEntry(dirblock[2])) return -1;
+    }
 
     // Remove the entry and free the FAT
     if (!this->removeDirEntry(dir, file.file_name)) return -1;
@@ -853,7 +863,7 @@ bool FS::__create(const dir_entry& dir, dir_entry& metadata, const std::string& 
     size_t pos = 0;
     int16_t fatIndex = metadata.first_blk;
     while (fatIndex != FAT_EOF) {
-        char buffer[4096]{0};
+        char buffer[BLOCK_SIZE]{0};
         totalData.copy(buffer, BLOCK_SIZE, pos);
         this->disk.write(fatIndex, (uint8_t*)buffer);
         pos += BLOCK_SIZE;
