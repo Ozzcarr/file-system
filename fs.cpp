@@ -96,9 +96,7 @@ int FS::cat(std::string filepath) {
         if (nextFat == FAT_EOF) throw std::runtime_error(("1: Reached end of file before expected in cat()!"));
 
         this->disk.read(nextFat, (uint8_t*)dirBlock);
-        for (char c : dirBlock) {
-            print += c;
-        }
+        std::cout.write(dirBlock, BLOCK_SIZE);
         nextFat = this->fat[nextFat];
     }
 
@@ -106,13 +104,10 @@ int FS::cat(std::string filepath) {
     size_t rest = (file.size & (BLOCK_SIZE - 1));
     if (rest) {
         if (nextFat == FAT_EOF) throw std::runtime_error("2: Reached end of file before expected in cat()!");
+        
         this->disk.read(nextFat, (uint8_t*)dirBlock);
-        for (int i = 0; i < rest; i++) {
-            print += dirBlock[i];
-        }
+        std::cout.write(dirBlock, rest);
     }
-
-    std::cout << print;
 
     return 0;
 }
