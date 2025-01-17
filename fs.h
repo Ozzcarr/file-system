@@ -29,6 +29,9 @@ struct dir_entry {
 
 class FS {
    public:
+    static const int FAT_SIZE = BLOCK_SIZE / 2;
+    static const int DIR_BLK_SIZE = BLOCK_SIZE / sizeof(dir_entry);
+
     FS();
     ~FS();
     // formats the disk, i.e., creates an empty file system
@@ -144,8 +147,34 @@ class FS {
     };
 
     Disk disk;
-    int16_t fat[BLOCK_SIZE / 2];
+    int16_t fat[FAT_SIZE];
     Path workingPath;
+
+    /// @brief Reads a directory block from disk.
+    /// @param block FatIndex to read from.
+    /// @param dirBlock Size FS::DIR_BLK_SIZE array of dir_entry to put read result in.
+    inline void read(const int16_t block, std::array<dir_entry, FS::DIR_BLK_SIZE>& dirBlock);
+
+    /// @brief Reads a file block from disk.
+    /// @param block FatIndex to read from.
+    /// @param dirBlock Size BLOCK_SIZE array of char to put read result in.
+    inline void read(const int16_t block, std::array<char, BLOCK_SIZE>& dirBlock);
+
+    /// @brief Reads fat from disk to memory.
+    inline void readFat();
+
+    /// @brief Writes a directory block to disk.
+    /// @param block FatIndex to write to.
+    /// @param dirBlock Size FS::DIR_BLK_SIZE array of dir_entry to write to disk.
+    inline void write(const int16_t block, const std::array<dir_entry, FS::DIR_BLK_SIZE>& dirBlock);
+
+    /// @brief Writes a file block to disk.
+    /// @param block FatIndex to write to.
+    /// @param dirBlock Size BLOCK_SIZE array of char to write to disk.
+    inline void write(const int16_t block, const std::array<char, BLOCK_SIZE>& dirBlock);
+
+    /// @brief Writes fat to disk.
+    inline void writeFat();
 
     /// @brief Returns whether dir entry is free or not by checking if file_name starts with NULL terminator.
     /// @param dir The directory entry to check.
