@@ -279,6 +279,9 @@ int FS::rm(std::string filepath) {
     if (!(dir.access_rights & WRITE)) return -1;
     if (!(dir.access_rights & READ)) return -1;
 
+    // Removing ourselfs is not good
+    if(file.first_blk == this->workingPath.workingDir().first_blk) return -1;
+
     // If the entry is a directory, check that it is empty
     if (file.type == TYPE_DIR) {
         dir_block dirblock;
@@ -453,6 +456,9 @@ int FS::chmod(std::string accessrights, std::string filepath) {
     int16_t fatIndex;
     int blockIndex;
     if (!this->workingPath.searchDir(dir, fileName, target, fatIndex, blockIndex)) return -1;
+
+    // Not allowed to chmod root
+    if (target.first_blk == ROOT_BLOCK) return -1;
 
     // Updates dir_entry in the directory
     dir_block dirBlock{};
